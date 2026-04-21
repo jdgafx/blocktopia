@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"pkill -f \\\"vite\\\" || true\"}",
+  "error": "Exit code 144",
+  "timestamp": "2026-04-21T23:01:55.599Z",
+  "retry_count": 1
+}
