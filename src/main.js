@@ -43,12 +43,20 @@ function init() {
     }
   }
 
-  // Find safe spawn Y: scan down for solid non-tree ground block
+  // Pass 1: find highest solid non-tree terrain block at spawn column
   const TREE_IDS = new Set([BLOCKS.LEAVES, BLOCKS.WOOD_LOG]);
-  let spawnY = 70;
-  for (let y = 62; y > 0; y--) {
+  let surfaceY = 2;
+  for (let y = 62; y >= 1; y--) {
     const id = world.getBlock(8, y, 8);
-    if (id !== 0 && !TREE_IDS.has(id)) { spawnY = y + 2; break; }
+    if (id !== 0 && !TREE_IDS.has(id)) { surfaceY = y; break; }
+  }
+  // Pass 2: scan upward from surface until 2 consecutive air blocks found
+  let spawnY = surfaceY + 1;
+  for (let y = surfaceY + 1; y < 63; y++) {
+    if (world.getBlock(8, y, 8) === 0 && world.getBlock(8, y + 1, 8) === 0) {
+      spawnY = y;
+      break;
+    }
   }
   player.position.set(8, spawnY, 8);
 
