@@ -39,6 +39,7 @@ export function buildAtlas() {
   }
 
   const texture = new THREE.CanvasTexture(canvas);
+  texture.flipY = false; // canvas y=0 is top; with flipY=true UV v=0 maps to canvas bottom (empty)
   texture.magFilter = THREE.NearestFilter;
   texture.minFilter = THREE.NearestFilter;
   return texture;

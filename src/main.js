@@ -3,6 +3,7 @@ import { Renderer } from './engine/renderer.js';
 import { Player } from './game/player.js';
 import { initTouchControls } from './game/touch.js';
 import { initHUD } from './ui/hud.js';
+import { BLOCKS } from './constants/blocks.js';
 
 const RENDER_DIST = navigator.maxTouchPoints > 0 ? 2 : 4;
 const SEED = 42;
@@ -16,7 +17,7 @@ function init() {
   initHUD();
   initTouchControls(player);
 
-  player._onBlockChanged = (wx, wy, wz) => {
+  player._onBlockChanged = (wx, _wy, wz) => {
     const cx = Math.floor(wx / 16);
     const cz = Math.floor(wz / 16);
     remeshChunk(cx, cz);
@@ -42,10 +43,12 @@ function init() {
     }
   }
 
-  // Find safe spawn Y above terrain
-  let spawnY = 50;
-  for (let y = 60; y > 0; y--) {
-    if (world.getBlock(8, y, 8) !== 0) { spawnY = y + 2; break; }
+  // Find safe spawn Y: scan down for solid non-tree ground block
+  const TREE_IDS = new Set([BLOCKS.LEAVES, BLOCKS.WOOD_LOG]);
+  let spawnY = 70;
+  for (let y = 62; y > 0; y--) {
+    const id = world.getBlock(8, y, 8);
+    if (id !== 0 && !TREE_IDS.has(id)) { spawnY = y + 2; break; }
   }
   player.position.set(8, spawnY, 8);
 
@@ -62,6 +65,12 @@ function init() {
     lastTime  = now;
 
     player.update(dt);
+
+    // Safety: respawn if player falls through the world
+    if (player.position.y < -20) {
+      player.position.set(8, spawnY, 8);
+      player._physics._vy = 0;
+    }
 
     const cx = Math.floor(player.position.x / 16);
     const cz = Math.floor(player.position.z / 16);
