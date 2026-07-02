@@ -2,7 +2,8 @@ import { World } from './engine/world.js';
 import { Renderer } from './engine/renderer.js';
 import { Player } from './game/player.js';
 import { initTouchControls } from './game/touch.js';
-import { initHUD } from './ui/hud.js';
+import { initNPCs, updateNPCs } from './game/npc.js';
+import { initHUD, initHints } from './ui/hud.js';
 import { BLOCKS } from './constants/blocks.js';
 
 const RENDER_DIST = navigator.maxTouchPoints > 0 ? 2 : 4;
@@ -63,6 +64,10 @@ function init() {
 
   loadChunksAround(player.position.x, player.position.z);
 
+  const npcs = initNPCs(world, renderer.scene, 8, 8);
+  window.__game.npcs = npcs;
+  initHints();
+
   let lastCX = Math.floor(player.position.x / 16);
   let lastCZ = Math.floor(player.position.z / 16);
   let lastTime = performance.now();
@@ -74,6 +79,7 @@ function init() {
     lastTime  = now;
 
     player.update(dt);
+    updateNPCs(npcs, dt, player.position);
 
     // Safety: respawn if player falls through the world
     if (player.position.y < -20) {
