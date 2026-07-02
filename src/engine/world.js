@@ -4,6 +4,7 @@ import { BLOCKS } from '../constants/blocks.js';
 export const CHUNK_W = 16;
 export const CHUNK_H = 64;
 export const CHUNK_D = 16;
+export const SEA_LEVEL = 21; // sand shoreline generates just above (clampedH < 22)
 
 export class Chunk {
   constructor(cx, cz) {
@@ -86,6 +87,11 @@ export class World {
           } else {
             chunk.setBlock(x, y, z, clampedH < 22 ? BLOCKS.SAND : BLOCKS.GRASS);
           }
+        }
+
+        // Fill oceans/lakes up to sea level
+        for (let y = clampedH + 1; y <= SEA_LEVEL; y++) {
+          chunk.setBlock(x, y, z, BLOCKS.WATER);
         }
 
         if (clampedH >= 22) {

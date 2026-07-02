@@ -37,6 +37,20 @@ describe('Physics', () => {
     expect(pos.x).toBeLessThan(2);
   });
 
+  it('stands stable straddling a block boundary (multi-block floor)', () => {
+    // Regression: player at x=8.0 overlaps floor columns 7 and 8. The old
+    // resolver zeroed vy on the first floor block, flipping later blocks in
+    // the same row to the ceiling branch -> sank 1 block per frame.
+    const world = solidWorld((x, y, z) => y < 30);
+    const phys = new Physics(world);
+    const pos = { x: 8.0, y: 30, z: 8.0 };
+    for (let i = 0; i < 60; i++) {
+      phys.update(pos, { x: 0, z: 0 }, false, 1 / 60);
+    }
+    expect(pos.y).toBeCloseTo(30, 3);
+    expect(phys.onGround).toBe(true);
+  });
+
   it('jumps when on ground', () => {
     const world = solidWorld((x, y, z) => y < 0);
     const phys = new Physics(world);

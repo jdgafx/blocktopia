@@ -1,46 +1,163 @@
 import * as THREE from 'three';
 
-// Colors per tile index [col, row=0] matching BLOCK_DEFS UV tiles
-const TILE_COLORS = {
-  '0,0': '#5d9e32', // grass top
-  '1,0': '#7c5c3a', // grass side
-  '2,0': '#8b6040', // dirt
-  '3,0': '#7a7a7a', // stone
-  '4,0': '#6b4f1e', // log top
-  '5,0': '#8c6b2c', // log side
-  '6,0': '#3a7a3a', // leaves
-  '7,0': '#d4c86e', // sand
-  '8,0': '#8a8078', // gravel
-  '9,0': '#b8874a', // planks
-  '10,0':'#888080', // stone brick
-  '11,0':'#c8e8f0', // glass (light blue)
-  '12,0':'#666666', // coal ore
-  '13,0':'#8a7050', // iron ore
-  '14,0':'#333333', // bedrock
-  '15,0':'#3d6bde', // water
+// Procedural 16x16 Minecraft-style textures painted into a 256x256 atlas.
+// Deterministic: seeded RNG so every build renders identical textures.
+const TILE = 16;
+const SIZE = 256;
+const ATLAS_SEED = 1337;
+
+function mulberry32(a) {
+  return () => {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// Per-pixel painters. Each returns [r,g,b,a] for pixel (x,y) in 0..15.
+function shade([r, g, b], f, a = 255) {
+  return [Math.round(r * f), Math.round(g * f), Math.round(b * f), a];
+}
+
+function pick(rand, arr) { return arr[Math.floor(rand() * arr.length)]; }
+
+const GRASS_GREEN = [106, 170, 64];
+const DIRT_BROWN  = [134, 96, 67];
+const STONE_GRAY  = [125, 125, 125];
+
+function grassTop(x, y, rand) {
+  return shade(GRASS_GREEN, pick(rand, [0.86, 0.93, 1.0, 1.06]));
+}
+function dirt(x, y, rand) {
+  return shade(DIRT_BROWN, pick(rand, [0.8, 0.9, 1.0, 1.08]));
+}
+function grassSide(x, y, rand) {
+  const lip = 2 + Math.floor(rand() * 2); // jagged grass lip 2-3px
+  if (y < lip) return shade(GRASS_GREEN, pick(rand, [0.8, 0.9, 1.0]));
+  return dirt(x, y, rand);
+}
+function stone(x, y, rand) {
+  const f = pick(rand, [0.85, 0.92, 1.0, 1.0, 1.06]);
+  return shade(STONE_GRAY, f);
+}
+function logTop(x, y, rand) {
+  const dx = x - 7.5, dy = y - 7.5;
+  const r = Math.sqrt(dx * dx + dy * dy);
+  const ring = Math.floor(r) % 2 === 0 ? 1.0 : 0.78;
+  return shade([160, 128, 74], ring * (0.95 + rand() * 0.1));
+}
+function logSide(x, y, rand) {
+  const stripe = x % 4 === 0 ? 0.7 : x % 4 === 2 ? 1.05 : 0.9;
+  return shade([104, 82, 49], stripe * (0.92 + rand() * 0.16));
+}
+function leaves(x, y, rand) {
+  const r = rand();
+  if (r > 0.86) return [0, 0, 0, 0]; // see-through holes (alphaTest)
+  return shade([58, 122, 44], pick(rand, [0.7, 0.85, 1.0, 1.15]));
+}
+function sand(x, y, rand) {
+  return shade([219, 207, 160], pick(rand, [0.9, 0.96, 1.0, 1.05]));
+}
+function gravel(x, y, rand) {
+  const f = pick(rand, [0.7, 0.82, 0.95, 1.05, 1.12]);
+  return shade([136, 126, 120], f);
+}
+function planks(x, y, rand) {
+  const board = y % 4 === 0 ? 0.68 : 1.0; // horizontal seams
+  const grain = (x * 7 + y * 3) % 11 === 0 ? 0.85 : 1.0;
+  return shade([176, 143, 87], board * grain * (0.95 + rand() * 0.08));
+}
+function stoneBrick(x, y, rand) {
+  const my = y % 8 === 7;
+  const row = Math.floor(y / 8);
+  const mx = (x + (row % 2 ? 4 : 0)) % 8 === 7;
+  if (mx || my) return shade([70, 70, 70], 0.95 + rand() * 0.1); // mortar
+  return shade([130, 130, 130], pick(rand, [0.88, 0.95, 1.0, 1.05]));
+}
+function glass(x, y, rand) {
+  const frame = x === 0 || y === 0 || x === 15 || y === 15;
+  if (frame) return [200, 220, 228, 255];
+  if (x + y === 18 || x + y === 19) return [235, 245, 250, 255]; // streak
+  return [0, 0, 0, 0]; // transparent pane
+}
+function oreIn(base) {
+  return (x, y, rand) => {
+    // clustered ore blobs on stone
+    const cx = ((x & 12) + 2), cy = ((y & 12) + 2);
+    const inBlob = Math.abs(x - cx) <= 1 && Math.abs(y - cy) <= 1 && rand() > 0.45;
+    if (inBlob) return shade(base, 0.9 + rand() * 0.25);
+    return stone(x, y, rand);
+  };
+}
+function bedrock(x, y, rand) {
+  return shade([70, 70, 70], pick(rand, [0.5, 0.75, 1.0, 1.25]));
+}
+function water(x, y, rand) {
+  const wave = (y + Math.floor(x / 4)) % 5 === 0 ? 1.2 : 1.0;
+  return shade([52, 95, 218], wave * (0.92 + rand() * 0.12));
+}
+
+// tile key 'col,row' -> painter, matching BLOCK_DEFS UV coords
+const TILE_PAINTERS = {
+  '0,0':  grassTop,
+  '1,0':  grassSide,
+  '2,0':  dirt,
+  '3,0':  stone,
+  '4,0':  logTop,
+  '5,0':  logSide,
+  '6,0':  leaves,
+  '7,0':  sand,
+  '8,0':  gravel,
+  '9,0':  planks,
+  '10,0': stoneBrick,
+  '11,0': glass,
+  '12,0': oreIn([28, 28, 28]),   // coal
+  '13,0': oreIn([196, 160, 120]),// iron
+  '14,0': bedrock,
+  '15,0': water,
 };
 
-export function buildAtlas() {
-  const TILE = 16;
-  const SIZE = 256; // 16 tiles across
-  const canvas = document.createElement('canvas');
-  canvas.width = SIZE;
-  canvas.height = SIZE;
-  const ctx = canvas.getContext('2d');
+let _canvas = null;
 
-  for (const [key, color] of Object.entries(TILE_COLORS)) {
+export function getAtlasCanvas() {
+  if (_canvas) return _canvas;
+  _canvas = document.createElement('canvas');
+  _canvas.width = SIZE;
+  _canvas.height = SIZE;
+  const ctx = _canvas.getContext('2d');
+  const img = ctx.createImageData(TILE, TILE);
+
+  for (const [key, paint] of Object.entries(TILE_PAINTERS)) {
     const [col, row] = key.split(',').map(Number);
-    ctx.fillStyle = color;
-    ctx.fillRect(col * TILE, row * TILE, TILE, TILE);
-    // Subtle border for block definition
-    ctx.strokeStyle = 'rgba(0,0,0,0.25)';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(col * TILE + 0.5, row * TILE + 0.5, TILE - 1, TILE - 1);
+    const rand = mulberry32(ATLAS_SEED + col * 31 + row * 7);
+    for (let y = 0; y < TILE; y++) {
+      for (let x = 0; x < TILE; x++) {
+        const [r, g, b, a] = paint(x, y, rand);
+        const i = (y * TILE + x) * 4;
+        img.data[i] = r; img.data[i + 1] = g; img.data[i + 2] = b; img.data[i + 3] = a;
+      }
+    }
+    ctx.putImageData(img, col * TILE, row * TILE);
   }
+  return _canvas;
+}
 
-  const texture = new THREE.CanvasTexture(canvas);
+// 32x32 pixelated crop of one tile, for hotbar slot backgrounds
+export function tileDataURL(col, row) {
+  const c = document.createElement('canvas');
+  c.width = 32; c.height = 32;
+  const ctx = c.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(getAtlasCanvas(), col * TILE, row * TILE, TILE, TILE, 0, 0, 32, 32);
+  return c.toDataURL();
+}
+
+export function buildAtlas() {
+  const texture = new THREE.CanvasTexture(getAtlasCanvas());
   texture.flipY = false; // canvas y=0 is top; with flipY=true UV v=0 maps to canvas bottom (empty)
   texture.magFilter = THREE.NearestFilter;
   texture.minFilter = THREE.NearestFilter;
+  texture.colorSpace = THREE.SRGBColorSpace;
   return texture;
 }

@@ -57,19 +57,23 @@ export class Physics {
   _resolveY(pos) {
     const mn = this._aabbMin(pos);
     const mx = this._aabbMax(pos);
-    let hitFloor = false;
+    // Decide floor-vs-ceiling ONCE from travel direction. Zeroing _vy inside
+    // the loop made the 2nd solid block of the same floor row take the
+    // ceiling branch and teleport the player down -> sinking through terrain.
+    const falling = this._vy < 0;
+    let hit = false;
     for (let bx = Math.floor(mn.x); bx <= Math.floor(mx.x - 1e-6); bx++) {
       for (let by = Math.floor(mn.y); by <= Math.floor(mx.y - 1e-6); by++) {
         for (let bz = Math.floor(mn.z); bz <= Math.floor(mx.z - 1e-6); bz++) {
           if (!this._world.isSolid(bx, by, bz)) continue;
-          if (this._vy < 0) { pos.y = by + 1; hitFloor = true; }
-          else               { pos.y = by - PLAYER_H; }
-          this._vy = 0;
+          if (falling) pos.y = Math.max(pos.y, by + 1);        // topmost floor wins
+          else         pos.y = Math.min(pos.y, by - PLAYER_H); // lowest ceiling wins
+          hit = true;
         }
       }
     }
-    this.onGround = hitFloor;
-    if (!hitFloor && this._vy <= 0) this.onGround = false;
+    if (hit) this._vy = 0;
+    this.onGround = falling && hit;
   }
 
   _resolveZ(pos) {

@@ -1,0 +1,7 @@
+[    1479ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:5199/favicon.ico:0
+[  629225ms] The root document of this element is not valid for pointer lock.
+[  632905ms] RangeError: Array buffer allocation failed
+    at new ArrayBuffer (<anonymous>)
+    at new Uint32Array (<anonymous>)
+    at _generateTables (http://localhost:5199/node_modules/.vite/deps/three.js?v=696fe475:5990:25)
+    at http://localhost:5199/node_modules/.vite/deps/three.js?v=696fe475:5954:15

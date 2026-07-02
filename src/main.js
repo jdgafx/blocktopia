@@ -16,6 +16,7 @@ function init() {
 
   initHUD();
   initTouchControls(player);
+  window.__game = { world, player, renderer }; // E2E test hook
 
   player._onBlockChanged = (wx, _wy, wz) => {
     const cx = Math.floor(wx / 16);
@@ -58,7 +59,7 @@ function init() {
       break;
     }
   }
-  player.position.set(8, spawnY, 8);
+  player.position.set(8.5, spawnY, 8.5); // block-centered: AABB stays in one column
 
   loadChunksAround(player.position.x, player.position.z);
 
@@ -76,7 +77,7 @@ function init() {
 
     // Safety: respawn if player falls through the world
     if (player.position.y < -20) {
-      player.position.set(8, spawnY, 8);
+      player.position.set(8.5, spawnY, 8.5); // block-centered: AABB stays in one column
       player._physics._vy = 0;
     }
 

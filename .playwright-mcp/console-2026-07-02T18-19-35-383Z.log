@@ -1,0 +1,4 @@
+[    2077ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:5199/favicon.ico:0
+[   20093ms] Pointer lock cannot be acquired immediately after the user has exited the lock.
+[  386594ms] The root document of this element is not valid for pointer lock.
+[  389219ms] The root document of this element is not valid for pointer lock.

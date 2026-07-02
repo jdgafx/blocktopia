@@ -4,3 +4,6 @@ dist/
 .claude-flow/
 .env
 *.local
+
+# Local Netlify folder
+.netlify
