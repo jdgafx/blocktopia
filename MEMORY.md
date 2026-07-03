@@ -19,6 +19,14 @@ Three.js voxel game (Minecraft-style), vanilla JS + Vite. Repo: https://github.c
 ## Characters (2026-07-02)
 `src/game/npc.js`: 3 villagers (Mira/Old Pete/Lily) + 2 fire dinosaurs (Blaze T-Rex, Cinder Raptor). Proximity dialog advances per-NPC storyline (lines double as tutorial). Fire = THREE.Points additive particles. Hints toast: `initHints()` in `src/ui/hud.js`.
 
+## Content round 2 (2026-07-02 late)
+- 26 block ids (see `src/constants/blocks.js`): added cobble/brick/snow/ice/gold+diamond ore/obsidian + 4 Roblox-style studded plastics (atlas row 1 painters in `src/ui/atlas.js`). PLACEABLE_BLOCKS drives the bag.
+- Inventory "Block Bag": E key / 🎒 / Esc, click cell → assigns to active hotbar slot (`initInventory` in `src/ui/hud.js`). Gotcha fixed: inline `style.display` starts '' not 'none' → first toggle no-op; init sets it explicitly. Pointer-lock click handler in player.js guards `#inventory,#auth-screen,#btn-logout,#btn-bag`.
+- BLOCK_SOLID dup table deleted — world.isSolid reads BLOCK_DEFS (single source of truth).
+- Ore gen bug: old branch order made IRON unreachable (coal condition shadowed it). Now rarest-deepest first: diamond y<7, gold y<11, iron y<16, coal y<24.
+- 11 NPCs: 5 meadow (Mira/Pete/Lily/Blaze/Cinder) + spread: Sage Willow (0,22 offset), Captain Marina (AT computed sea spot via findSea ring-scan), Goldie (34,-28), Brixton Builder-Bot (-30,-20), Nova (-48,36), Rex Robo-Dino (52,18). {SEA} token in stories replaced with real computed direction+distance. initNPCs returns {npcs, seaText}; seaText feeds initHints.
+- Compass facing (N/NE/…) in info bar; number keys 1-9 select hotbar.
+
 ## Testing
 - `window.__game = { world, player, renderer, npcs }` E2E hook in main.js.
 - Playwright MCP flaky here; use standalone scripts with `/home/chris2/dev/browser-automation/node_modules/playwright/index.mjs` + executablePath `/home/chris2/.cache/ms-playwright/chromium-1228/chrome-linux64/chrome` + `--enable-unsafe-swiftshader --no-sandbox` (WebGL in headless).
