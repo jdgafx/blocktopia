@@ -83,7 +83,9 @@ export function initInventory(player) {
     inv.style.display = open ? 'flex' : 'none';
     if (open) document.dispatchEvent(new CustomEvent('quest', { detail: 'bag' }));
     if (open) document.exitPointerLock?.();
-    else if (navigator.maxTouchPoints === 0) document.body.requestPointerLock?.();
+    else if (navigator.maxTouchPoints === 0) {
+      try { document.body.requestPointerLock?.()?.catch?.(() => {}); } catch { /* lock already pending */ }
+    }
   }
 
   document.addEventListener('keydown', (e) => {
