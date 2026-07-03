@@ -90,15 +90,63 @@
       text-align: center; line-height: 1.45;
     }
     #npc-dialog b { color: #ffcc66; }
+    #auth-screen {
+      position: fixed; inset: 0; z-index: 200;
+      background: linear-gradient(#6db3e8, #a8d8a0);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      color: #fff;
+    }
+    #auth-screen h1 { font-size: 3rem; letter-spacing: 3px; text-shadow: 2px 3px 0 rgba(0,0,0,0.35); }
+    #auth-screen .tagline { margin: 6px 0 18px; color: #f4fff4; text-shadow: 1px 1px 2px rgba(0,0,0,0.4); }
+    .auth-card {
+      background: rgba(0,0,0,0.55); padding: 22px; border-radius: 12px;
+      display: flex; flex-direction: column; gap: 10px; width: min(320px, 88vw);
+    }
+    .auth-card input {
+      padding: 10px 12px; border-radius: 6px; border: none; font-size: 15px;
+    }
+    .auth-card button {
+      padding: 11px; border-radius: 6px; border: none; font-size: 15px;
+      font-weight: bold; cursor: pointer; background: #4caf50; color: #fff;
+    }
+    .auth-card button:hover { filter: brightness(1.1); }
+    .auth-row { display: flex; gap: 10px; }
+    .auth-row button { flex: 1; }
+    #btn-login { background: #1976d2; }
+    .divider { text-align: center; color: #bbb; font-size: 12px; }
+    #auth-error { color: #ff8a80; font-size: 13px; text-align: center; min-height: 1em; }
+    #btn-logout {
+      position: fixed; top: 8px; right: 8px; z-index: 50;
+      padding: 6px 12px; border-radius: 6px; border: none; cursor: pointer;
+      background: rgba(0,0,0,0.5); color: #fff; font-size: 12px;
+    }
   </style>
 </head>
 <body>
   <canvas id="canvas"></canvas>
 
-  <div id="click-to-play">
+  <div id="click-to-play" style="display:none">
     <h1>BLOCKTOPIA</h1>
     <p>Click to play</p>
   </div>
+
+  <div id="auth-screen">
+    <h1>BLOCKTOPIA</h1>
+    <p class="tagline">Free to play · Build together · <span id="online-count"></span></p>
+    <div class="auth-card">
+      <input id="auth-name" type="text" maxlength="20" placeholder="Your player name" autocomplete="nickname" title="The name other players see above your head" />
+      <button id="btn-guest" title="Jump in instantly — no account needed">Play as Guest</button>
+      <div class="divider">or with an account (saves your name everywhere)</div>
+      <input id="auth-email" type="email" placeholder="Email" autocomplete="email" title="Used only to sign in — never shown to other players" />
+      <input id="auth-password" type="password" placeholder="Password (6+ characters)" autocomplete="current-password" title="At least 6 characters" />
+      <div class="auth-row">
+        <button id="btn-login" title="Sign in to an existing account">Log In</button>
+        <button id="btn-signup" title="Create a free account">Sign Up</button>
+      </div>
+      <div id="auth-error"></div>
+    </div>
+  </div>
+  <button id="btn-logout" style="display:none" title="Sign out and return to the start screen">Log out</button>
 
   <div id="hud">
     <div id="info" title="Your position and framerate">WASD move · Space jump · Left click break · Right click place</div>

@@ -7,7 +7,7 @@ export default defineConfig({
       output: {
         manualChunks: {
           three: ['three'],
-          supabase: ['@supabase/supabase-js'],
+          firebase: ['firebase/app', 'firebase/auth', 'firebase/database'],
         },
       },
     },

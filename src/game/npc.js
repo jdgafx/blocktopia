@@ -78,7 +78,7 @@ function makeSkinTexture(skin) {
   return t;
 }
 
-function makeNameSprite(name) {
+export function makeNameSprite(name) {
   const c = document.createElement('canvas');
   c.width = 256; c.height = 40;
   const ctx = c.getContext('2d');
@@ -96,7 +96,7 @@ function makeNameSprite(name) {
   return sprite;
 }
 
-function buildVillager(def) {
+export function buildVillager(def) {
   const g = new THREE.Group();
   const shirt = new THREE.MeshLambertMaterial({ color: def.skin.shirt });
   const pants = new THREE.MeshLambertMaterial({ color: def.skin.pants });

@@ -10,9 +10,9 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "three": "^0.163.0",
-    "@supabase/supabase-js": "^2.43.0",
-    "simplex-noise": "^4.0.1"
+    "firebase": "^12.15.0",
+    "simplex-noise": "^4.0.1",
+    "three": "^0.163.0"
   },
   "devDependencies": {
     "vite": "^5.2.0",
