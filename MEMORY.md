@@ -23,7 +23,12 @@ Three.js voxel game (Minecraft-style), vanilla JS + Vite. Repo: https://github.c
 - `window.__game = { world, player, renderer, npcs }` E2E hook in main.js.
 - Playwright MCP flaky here; use standalone scripts with `/home/chris2/dev/browser-automation/node_modules/playwright/index.mjs` + executablePath `/home/chris2/.cache/ms-playwright/chromium-1228/chrome-linux64/chrome` + `--enable-unsafe-swiftshader --no-sandbox` (WebGL in headless).
 
-## Blocked / pending (2026-07-02)
-- Auth (signup + persistent login) + multiplayer: plan = Supabase (auth + Realtime broadcast for multiplayer; free, no payment). BLOCKED: free tier 2-active-project limit (FreelanceAutopilot + meeting-transcriber active). User must pick: pause one, reuse one's auth, or other org.
-- Vercel hosting migration: blocked on user completing MCP OAuth.
-- User requirements: free game, no payment features, kid-friendly multiplayer server.
+## Auth + multiplayer (2026-07-02, SHIPPED)
+Firebase project `blocktopia-game` (owner cnjgentile@gmail.com; Supabase was full — 2-project free cap; Vercel OAuth never completed, hosting stays Netlify).
+- Web app id 1:1006123350241:web:f34decda9f3cbdfb395fa0; config committed in `src/net/firebase.js` (public identifiers; security = DB rules in `database.rules.json`, deploy via `firebase deploy --only database --project blocktopia-game`).
+- Auth: email/password + anonymous guest, both enabled. Free-tier Auth provisioning is CONSOLE-ONLY (API initializeAuth = paid Identity Platform) — user clicked "Get started" once. Provider/domain edits DO work via API afterward: PATCH identitytoolkit.googleapis.com/admin/v2/projects/blocktopia-game/config with Bearer token minted from firebase CLI refresh token (~/.config/configstore/firebase-tools.json + CLI's public client id/secret).
+- Persistent login = Firebase default indexedDB persistence; verified reload → auto-login.
+- Multiplayer: RTDB https://blocktopia-game-default-rtdb.firebaseio.com — /players/{uid} position sync (~120ms throttle, onDisconnect cleanup) + /blocks/{x_y_z} shared block edits. Remote avatars = villager builder + name sprite from npc.js. Two-context Playwright test `mptest.mjs` (scratchpad) proves join/move/build sync + persistence, run against localhost AND live prod: all green.
+- Signup name race: displayName write lands after onAuthStateChanged → pass typed name into startGame/joinWorld explicitly.
+- CSP in netlify.toml allows *.googleapis.com + *.firebaseio.com (wss too). Supabase dep removed.
+- User requirements: free game, no payment features, kid-friendly multiplayer. All features free ✓.
