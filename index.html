@@ -144,6 +144,32 @@
       margin-top: 14px; width: 100%; padding: 9px; border: none; border-radius: 6px;
       background: #4caf50; color: #fff; font-weight: bold; cursor: pointer;
     }
+    #intro {
+      position: fixed; inset: 0; z-index: 150; display: none;
+      align-items: center; justify-content: center;
+      background: rgba(10,20,35,0.75);
+    }
+    #intro-card {
+      background: linear-gradient(160deg, #2b3d8f, #7b2d8f);
+      border: 3px solid #ffd54f; border-radius: 16px; padding: 26px;
+      max-width: min(480px, 90vw); color: #fff; text-align: center;
+    }
+    #intro-card h2 { font-size: 26px; margin-bottom: 10px; color: #ffd54f; }
+    #intro-card p { font-size: 15px; line-height: 1.55; margin-bottom: 10px; }
+    #intro-card button {
+      margin-top: 8px; padding: 12px 26px; font-size: 16px; font-weight: bold;
+      border: none; border-radius: 8px; background: #ffd54f; color: #4a2800; cursor: pointer;
+    }
+    #quests {
+      position: fixed; top: 44px; right: 8px; z-index: 40;
+      background: rgba(0,0,0,0.55); border-radius: 8px; padding: 10px 14px;
+      color: #fff; font-size: 13px; pointer-events: none; max-width: 240px;
+    }
+    #quests h3 { font-size: 13px; color: #ffd54f; margin-bottom: 6px; }
+    #quests li { list-style: none; margin: 3px 0; color: #ddd; }
+    #quests li.done { color: #7fdc8a; text-decoration: line-through; }
+    #quests li.done::before { content: '✔ '; }
+    #quests li::before { content: '• '; }
   </style>
 </head>
 <body>
@@ -182,6 +208,31 @@
   </div>
   <div id="hint"></div>
   <div id="npc-dialog"></div>
+
+  <div id="intro">
+    <div id="intro-card">
+      <h2>⚡ The Story of Blocktopia ⚡</h2>
+      <p>The Great Block Storm scattered everyone across the land. Mira lost her house.
+      Old Pete's mine caved in. Even the fire dinosaurs are grumpy about it.</p>
+      <p><b>You are the new Builder</b> — the one who can put the world back together,
+      block by block. The people of Blocktopia will tell you what they need.
+      Start with <b>Mira the Builder</b> — she's waiting in the meadow.</p>
+      <p style="color:#ffe082">Your first quests are on the right. Double-tap SPACE to fly!</p>
+      <button id="intro-start" title="Jump into Blocktopia">Start the Adventure</button>
+    </div>
+  </div>
+
+  <div id="quests" style="display:none">
+    <h3>⭐ Quests</h3>
+    <ul>
+      <li id="q-talk" title="Walk up to Mira in the meadow">Talk to Mira the Builder</li>
+      <li id="q-break" title="Hold left click on any block">Break a block</li>
+      <li id="q-bag" title="Press E">Open your Block Bag</li>
+      <li id="q-place" title="Right click on the ground">Place a block</li>
+      <li id="q-sea" title="Check the hints for directions!">Find the sea</li>
+    </ul>
+  </div>
+  <div id="water-overlay" style="position:fixed; inset:0; background:rgba(24,80,190,0.30); pointer-events:none; display:none; z-index:5;"></div>
 
   <div id="touch-controls">
     <div id="joystick-zone"><div id="joystick-knob"></div></div>

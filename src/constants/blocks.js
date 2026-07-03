@@ -25,6 +25,7 @@ export const BLOCKS = Object.freeze({
   PLASTIC_BLUE: 23,
   PLASTIC_YELLOW: 24,
   PLASTIC_GREEN: 25,
+  TNT: 26,
 });
 
 // UV tile coords [col, row] in the 16×16 atlas grid
@@ -55,6 +56,7 @@ export const BLOCK_DEFS = {
   [BLOCKS.PLASTIC_BLUE]:  { name: 'Blue Plastic',   solid: true, transparent: false, top:[8,1], side:[8,1], bot:[8,1] },
   [BLOCKS.PLASTIC_YELLOW]:{ name: 'Yellow Plastic', solid: true, transparent: false, top:[9,1], side:[9,1], bot:[9,1] },
   [BLOCKS.PLASTIC_GREEN]: { name: 'Green Plastic',  solid: true, transparent: false, top:[10,1],side:[10,1],bot:[10,1]},
+  [BLOCKS.TNT]:           { name: 'TNT',            solid: true, transparent: false, top:[12,1],side:[11,1],bot:[12,1]},
 };
 
 export const HOTBAR_BLOCKS = [

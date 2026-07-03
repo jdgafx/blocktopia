@@ -138,6 +138,20 @@ function plastic(base) {
   };
 }
 
+function tntSide(x, y, rand) {
+  if (y >= 5 && y <= 10) {
+    // white band with dark TNT letters
+    const letter = (y >= 6 && y <= 9) && (x % 5 === 1 || (x % 5 === 2 && (y === 6 || y === 9)));
+    return letter ? [40, 30, 30, 255] : shade([235, 230, 220], 0.95 + rand() * 0.08);
+  }
+  return shade([200, 48, 40], pick(rand, [0.85, 0.95, 1.0, 1.05]));
+}
+function tntTop(x, y, rand) {
+  const cx = Math.abs(x - 7.5), cy = Math.abs(y - 7.5);
+  if (cx < 2 && cy < 2) return shade([80, 70, 60], 0.9 + rand() * 0.2); // fuse
+  return shade([200, 48, 40], pick(rand, [0.88, 0.96, 1.04]));
+}
+
 // tile key 'col,row' -> painter, matching BLOCK_DEFS UV coords
 const TILE_PAINTERS = {
   '0,0':  grassTop,
@@ -167,6 +181,8 @@ const TILE_PAINTERS = {
   '8,1':  plastic([13, 105, 208]), // blue
   '9,1':  plastic([245, 205, 48]), // yellow
   '10,1': plastic([76, 175, 80]),  // green
+  '11,1': tntSide,
+  '12,1': tntTop,
 };
 
 let _canvas = null;

@@ -377,6 +377,7 @@ export function updateNPCs(npcs, dt, playerPos) {
   for (const npc of npcs) {
     const spoke = npc.update(dt, playerPos);
     if (spoke && box) {
+      document.dispatchEvent(new CustomEvent('quest', { detail: 'talk:' + spoke.name }));
       box.innerHTML = `<b>${spoke.name}</b><br>${spoke.line}`;
       box.style.display = 'block';
       clearTimeout(box._hideTimer);

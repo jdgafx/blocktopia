@@ -16,6 +16,8 @@ export class Player {
     this._pitch    = 0;
 
     this._keys     = {};
+    this.flying    = false;
+    this._lastSpaceTap = 0;
     this._moveDir  = { x: 0, z: 0 };
     this._jump     = false;
     this._breaking = false;
@@ -56,6 +58,12 @@ export class Player {
     });
 
     document.addEventListener('keydown', (e) => {
+      if (e.code === 'Space' && !this._keys['Space']) {
+        // double-tap space toggles creative flight
+        const now = performance.now();
+        if (now - this._lastSpaceTap < 300) this.flying = !this.flying;
+        this._lastSpaceTap = now;
+      }
       this._keys[e.code] = true;
       const digit = e.code.match(/^Digit([1-9])$/);
       if (digit) { this.hotbarIdx = Number(digit[1]) - 1; this._updateHotbarUI(); }
@@ -64,7 +72,7 @@ export class Player {
 
     document.addEventListener('mousedown', (e) => {
       if (!document.pointerLockElement) return;
-      if (e.button === 0) this._breaking = true;
+      if (e.button === 0) { this._breaking = true; this.onAttack?.(); }
       if (e.button === 2) this._placing  = true;
     });
     document.addEventListener('mouseup', (e) => {
@@ -81,7 +89,10 @@ export class Player {
 
   update(dt) {
     this._computeMoveDir();
-    this._physics.update(this.position, this._moveDir, this._jump || this.touchJump, dt);
+    this._physics.update(this.position, this._moveDir, this._jump || this.touchJump, dt, {
+      flying: this.flying,
+      down: this._keys['ShiftLeft'] || this._keys['ShiftRight'],
+    });
     this._updateCamera();
     this._handleBlockInteraction(dt);
     this._updateHotbarUI();
@@ -140,6 +151,7 @@ export class Player {
         this._world.setBlock(hit.x, hit.y, hit.z, BLOCKS.AIR);
         this._breakTimer = 0;
         this._onBlockChanged(hit.x, hit.y, hit.z);
+        document.dispatchEvent(new CustomEvent('quest', { detail: 'break' }));
       }
     } else {
       this._breakTimer = 0;
@@ -157,6 +169,7 @@ export class Player {
       if (!(ddx < 0.4 && ddz < 0.4 && ddy >= -0.1 && ddy < 1.9)) {
         this._world.setBlock(px, py, pz, this.hotbar[this.hotbarIdx]);
         this._onBlockChanged(px, py, pz);
+        document.dispatchEvent(new CustomEvent('quest', { detail: 'place' }));
       }
     }
     this._lastPlacing = placingNow;

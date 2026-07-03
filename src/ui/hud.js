@@ -81,6 +81,7 @@ export function initInventory(player) {
 
   function toggle(open = inv.style.display === 'none') {
     inv.style.display = open ? 'flex' : 'none';
+    if (open) document.dispatchEvent(new CustomEvent('quest', { detail: 'bag' }));
     if (open) document.exitPointerLock?.();
     else if (navigator.maxTouchPoints === 0) document.body.requestPointerLock?.();
   }

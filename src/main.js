@@ -1,9 +1,11 @@
+import * as THREE from 'three';
 import { World } from './engine/world.js';
 import { Renderer } from './engine/renderer.js';
 import { Player } from './game/player.js';
 import { initTouchControls } from './game/touch.js';
 import { initNPCs, updateNPCs, buildVillager, makeNameSprite } from './game/npc.js';
 import { initHUD, initHints, initInventory } from './ui/hud.js';
+import { createExplosions } from './game/explosions.js';
 import { BLOCKS } from './constants/blocks.js';
 import {
   watchAuth, signUp, logIn, playAsGuest, logOut, playerName,
@@ -70,6 +72,7 @@ function startGame(user, chosenName) {
       if (world.getBlock(x, y, z) === id) return; // our own echo
       world.setBlock(x, y, z, id);
       remeshAround(x, z);
+      window.__game.explosions?.onBlockPlaced(x, y, z, id); // remote TNT fuses too
     },
   }, myName);
   window.__game.net = net;
@@ -114,6 +117,76 @@ function startGame(user, chosenName) {
   window.__game.npcs = npcs;
   initHints({ seaText });
 
+  // ---- TNT + dino popping ----
+  const applyBlock = (x, y, z, id) => {
+    world.setBlock(x, y, z, id);
+    remeshAround(x, z);
+    net.sendBlock(x, y, z, id);
+  };
+  const explosions = createExplosions({ world, scene: renderer.scene, npcs, applyBlock });
+  window.__game.explosions = explosions;
+  const prevOnBlockChanged = player._onBlockChanged;
+  player._onBlockChanged = (wx, wy, wz) => {
+    prevOnBlockChanged(wx, wy, wz);
+    explosions.onBlockPlaced(wx, wy, wz, world.getBlock(wx, wy, wz));
+  };
+
+  // punch dinos: 3 bops and they pop (then respawn)
+  player.onAttack = () => {
+    const dir = new THREE.Vector3();
+    renderer.camera.getWorldDirection(dir);
+    for (const npc of npcs) {
+      if (!npc.def.dino || npc.popped) continue;
+      const to = npc.position.clone().sub(player.position);
+      const dist = to.length();
+      if (dist > 4.5) continue;
+      if (to.normalize().dot(dir) < 0.75) continue; // must be looking at it
+      npc.hits = (npc.hits || 0) + 1;
+      npc.group.scale.setScalar(0.9);
+      setTimeout(() => npc.group.scale.setScalar(1), 120);
+      if (npc.hits >= 3) { npc.hits = 0; explosions.popDino(npc); }
+      break;
+    }
+  };
+
+  // ---- intro story + quests ----
+  const intro = document.getElementById('intro');
+  const quests = document.getElementById('quests');
+  if (!localStorage.getItem('blocktopia-intro-seen')) {
+    intro.style.display = 'flex';
+    document.exitPointerLock?.();
+  } else {
+    quests.style.display = 'block';
+  }
+  document.getElementById('intro-start')?.addEventListener('click', () => {
+    intro.style.display = 'none';
+    quests.style.display = 'block';
+    localStorage.setItem('blocktopia-intro-seen', '1');
+    document.getElementById('click-to-play')?.remove();
+    document.body.requestPointerLock?.();
+  });
+
+  const questState = JSON.parse(localStorage.getItem('blocktopia-quests') || '{}');
+  const markQuest = (id) => {
+    document.getElementById(id)?.classList.add('done'); // always reflect in UI (incl. restore)
+    if (!questState[id]) {
+      questState[id] = true;
+      localStorage.setItem('blocktopia-quests', JSON.stringify(questState));
+    }
+    if (['q-talk', 'q-break', 'q-bag', 'q-place', 'q-sea'].every(q => questState[q])) {
+      const h = quests.querySelector('h3');
+      if (h) h.textContent = '🎉 Quests complete! The world is yours';
+    }
+  };
+  for (const [id, done] of Object.entries(questState)) if (done) markQuest(id);
+  document.addEventListener('quest', (e) => {
+    const d = e.detail;
+    if (d === 'break') markQuest('q-break');
+    if (d === 'place') markQuest('q-place');
+    if (d === 'bag') markQuest('q-bag');
+    if (d.startsWith?.('talk:Mira')) markQuest('q-talk');
+  });
+
   let lastCX = Math.floor(player.position.x / 16);
   let lastCZ = Math.floor(player.position.z / 16);
   let lastTime = performance.now();
@@ -147,6 +220,23 @@ function startGame(user, chosenName) {
       loadChunksAround(player.position.x, player.position.z);
       lastCX = cx; lastCZ = cz;
     }
+
+    // sea quest: standing at a shore counts as finding it
+    if (!questState['q-sea'] && Math.floor(now / 1000) !== Math.floor((now - dt * 1000) / 1000)) {
+      const px = Math.floor(player.position.x), pz = Math.floor(player.position.z);
+      for (let dx = -3; dx <= 3 && !questState['q-sea']; dx++) {
+        for (let dz = -3; dz <= 3; dz++) {
+          if (world.getBlock(px + dx, 21, pz + dz) === BLOCKS.WATER) { markQuest('q-sea'); break; }
+        }
+      }
+    }
+
+    // underwater tint when the camera (eye) is inside water
+    const eyeIn = world.getBlock(
+      Math.floor(player.position.x), Math.floor(player.position.y + 1.6), Math.floor(player.position.z),
+    ) === BLOCKS.WATER;
+    const wo = document.getElementById('water-overlay');
+    if (wo) wo.style.display = eyeIn ? 'block' : 'none';
 
     const info = document.getElementById('info');
     if (info) {

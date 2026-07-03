@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { Physics } from '../src/engine/physics.js';
 import { BLOCKS } from '../src/constants/blocks.js';
 
-function solidWorld(solidFn) {
-  return { isSolid: solidFn };
+function solidWorld(solidFn, blockFn = () => 0) {
+  return { isSolid: solidFn, getBlock: blockFn };
 }
 
 describe('Physics', () => {
@@ -49,6 +49,22 @@ describe('Physics', () => {
     }
     expect(pos.y).toBeCloseTo(30, 3);
     expect(phys.onGround).toBe(true);
+  });
+
+  it('swims: sinks gently in water, paddles up with jump held', () => {
+    // world of water everywhere below y=30, no solids
+    const world = solidWorld(() => false, (x, y, z) => (y < 30 ? 14 : 0));
+    const phys = new Physics(world);
+    const pos = { x: 0.5, y: 20, z: 0.5 };
+    // no input: gentle sink, never faster than swim terminal
+    for (let i = 0; i < 60; i++) phys.update(pos, { x: 0, z: 0 }, false, 1 / 60);
+    expect(phys.inWater).toBe(true);
+    expect(pos.y).toBeLessThan(20);
+    expect(pos.y).toBeGreaterThan(20 - 2.0); // sank ~1.5 blocks max in 1s, not freefall
+    // paddle up
+    const yBefore = pos.y;
+    for (let i = 0; i < 60; i++) phys.update(pos, { x: 0, z: 0 }, true, 1 / 60);
+    expect(pos.y).toBeGreaterThan(yBefore + 2);
   });
 
   it('jumps when on ground', () => {
