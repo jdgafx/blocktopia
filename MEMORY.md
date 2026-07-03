@@ -27,6 +27,13 @@ Three.js voxel game (Minecraft-style), vanilla JS + Vite. Repo: https://github.c
 - 11 NPCs: 5 meadow (Mira/Pete/Lily/Blaze/Cinder) + spread: Sage Willow (0,22 offset), Captain Marina (AT computed sea spot via findSea ring-scan), Goldie (34,-28), Brixton Builder-Bot (-30,-20), Nova (-48,36), Rex Robo-Dino (52,18). {SEA} token in stories replaced with real computed direction+distance. initNPCs returns {npcs, seaText}; seaText feeds initHints.
 - Compass facing (N/NE/…) in info bar; number keys 1-9 select hotbar.
 
+## Content round 3 (2026-07-02 night, SHIPPED + live-verified)
+- Swimming: physics.js water branch (buoyant sink -1.6, SPACE paddle +4.5, shore-exit boost, treads/bobs at surface); underwater blue overlay div toggled in main loop. Swim unit test in physics.test.js (fake worlds need getBlock now).
+- Creative flight: double-tap SPACE toggles (400ms window — 300 was flaky), SPACE up/SHIFT down, 1.8x speed, collisions still on. opts arg on Physics.update.
+- TNT id 26 (fuse 2.5s, radius 3.5 crater, chain reactions, orange flash mesh) in src/game/explosions.js; remote TNT fuses via onBlockChange hook. Dinos within 7 pop (visible=false, respawn 10s). Punch: player.onAttack in main — 3 hits within 4.5 + facing dot>0.75 pops dino.
+- Intro story overlay (first visit only, localStorage 'blocktopia-intro-seen') + 5 starter quests panel (talk to Mira/break/bag/place/find sea), CustomEvent('quest') emitters in player/npc/hud, state in localStorage 'blocktopia-quests'. Gotcha fixed: markQuest must add .done class BEFORE the already-done guard or restore no-ops.
+- megatest.mjs (scratchpad) covers all of round 3 vs localhost or live.
+
 ## Testing
 - `window.__game = { world, player, renderer, npcs }` E2E hook in main.js.
 - Playwright MCP flaky here; use standalone scripts with `/home/chris2/dev/browser-automation/node_modules/playwright/index.mjs` + executablePath `/home/chris2/.cache/ms-playwright/chromium-1228/chrome-linux64/chrome` + `--enable-unsafe-swiftshader --no-sandbox` (WebGL in headless).
