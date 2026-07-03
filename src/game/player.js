@@ -61,7 +61,7 @@ export class Player {
       if (e.code === 'Space' && !this._keys['Space']) {
         // double-tap space toggles creative flight
         const now = performance.now();
-        if (now - this._lastSpaceTap < 300) this.flying = !this.flying;
+        if (now - this._lastSpaceTap < 400) this.flying = !this.flying;
         this._lastSpaceTap = now;
       }
       this._keys[e.code] = true;
