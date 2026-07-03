@@ -14,6 +14,17 @@ export const BLOCKS = Object.freeze({
   IRON_ORE: 12,
   BEDROCK: 13,
   WATER: 14,
+  COBBLESTONE: 15,
+  BRICK: 16,
+  SNOW: 17,
+  ICE: 18,
+  GOLD_ORE: 19,
+  DIAMOND_ORE: 20,
+  OBSIDIAN: 21,
+  PLASTIC_RED: 22,
+  PLASTIC_BLUE: 23,
+  PLASTIC_YELLOW: 24,
+  PLASTIC_GREEN: 25,
 });
 
 // UV tile coords [col, row] in the 16×16 atlas grid
@@ -33,9 +44,25 @@ export const BLOCK_DEFS = {
   [BLOCKS.IRON_ORE]:   { name: 'Iron Ore',     solid: true,  transparent: false, top:[13,0],side:[13,0],bot:[13,0]},
   [BLOCKS.BEDROCK]:    { name: 'Bedrock',      solid: true,  transparent: false, top:[14,0],side:[14,0],bot:[14,0]},
   [BLOCKS.WATER]:      { name: 'Water',        solid: false, transparent: true,  top:[15,0],side:[15,0],bot:[15,0]},
+  [BLOCKS.COBBLESTONE]:{ name: 'Cobblestone',  solid: true,  transparent: false, top:[0,1], side:[0,1], bot:[0,1] },
+  [BLOCKS.BRICK]:      { name: 'Brick',        solid: true,  transparent: false, top:[1,1], side:[1,1], bot:[1,1] },
+  [BLOCKS.SNOW]:       { name: 'Snow',         solid: true,  transparent: false, top:[2,1], side:[2,1], bot:[2,1] },
+  [BLOCKS.ICE]:        { name: 'Ice',          solid: true,  transparent: false, top:[3,1], side:[3,1], bot:[3,1] },
+  [BLOCKS.GOLD_ORE]:   { name: 'Gold Ore',     solid: true,  transparent: false, top:[4,1], side:[4,1], bot:[4,1] },
+  [BLOCKS.DIAMOND_ORE]:{ name: 'Diamond Ore',  solid: true,  transparent: false, top:[5,1], side:[5,1], bot:[5,1] },
+  [BLOCKS.OBSIDIAN]:   { name: 'Obsidian',     solid: true,  transparent: false, top:[6,1], side:[6,1], bot:[6,1] },
+  [BLOCKS.PLASTIC_RED]:   { name: 'Red Plastic',    solid: true, transparent: false, top:[7,1], side:[7,1], bot:[7,1] },
+  [BLOCKS.PLASTIC_BLUE]:  { name: 'Blue Plastic',   solid: true, transparent: false, top:[8,1], side:[8,1], bot:[8,1] },
+  [BLOCKS.PLASTIC_YELLOW]:{ name: 'Yellow Plastic', solid: true, transparent: false, top:[9,1], side:[9,1], bot:[9,1] },
+  [BLOCKS.PLASTIC_GREEN]: { name: 'Green Plastic',  solid: true, transparent: false, top:[10,1],side:[10,1],bot:[10,1]},
 };
 
 export const HOTBAR_BLOCKS = [
   BLOCKS.GRASS, BLOCKS.DIRT, BLOCKS.STONE, BLOCKS.WOOD_LOG,
-  BLOCKS.LEAVES, BLOCKS.SAND, BLOCKS.PLANKS, BLOCKS.STONE_BRICK, BLOCKS.GLASS,
+  BLOCKS.PLANKS, BLOCKS.BRICK, BLOCKS.PLASTIC_RED, BLOCKS.PLASTIC_BLUE, BLOCKS.GLASS,
 ];
+
+// everything a player may place from the inventory bag
+export const PLACEABLE_BLOCKS = Object.keys(BLOCK_DEFS)
+  .map(Number)
+  .filter(id => id !== BLOCKS.AIR && id !== BLOCKS.WATER && id !== BLOCKS.BEDROCK);

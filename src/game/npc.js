@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { Physics } from '../engine/physics.js';
+import { BLOCKS } from '../constants/blocks.js';
 
 // Blocky wandering NPCs with per-character storylines. Each approach by the
 // player advances that NPC's story one line; lines double as gameplay hints.
@@ -35,6 +36,78 @@ const NPC_DEFS = [
       "Press SPACE to jump ledges. Two blocks is your limit, so plan your climbs.",
       "If you ever fall off the world's edge, don't panic — you wake up right back at the spawn meadow.",
       "The map's never finished. That's the best part. Go see what's past the fog for me, will you?",
+    ],
+  },
+];
+
+// spread across the land: [dx, dz] from spawn. Stories may contain {SEA},
+// replaced at init with the real computed direction to water.
+const FAR_DEFS = [
+  {
+    name: 'Sage Willow', at: [0, 22],
+    skin: { shirt: '#7b1fa2', pants: '#4a148c', skinTone: '#e0ac7e', hair: '#eeeeee' },
+    story: [
+      'Welcome, young one. I am Willow. I remember when this world was only fog.',
+      'Five friends live near the meadow where you woke — and more of us live far beyond it.',
+      'The land goes on and on. Walk any direction and new ground grows under your feet.',
+      'If you ever tumble off the world, the meadow calls you back. You cannot truly be lost.',
+      'Build something beautiful. That is how this world remembers you.',
+    ],
+  },
+  {
+    name: 'Captain Marina', at: null, // placed at the real sea; fallback [40, 40]
+    skin: { shirt: '#01579b', pants: '#263238', skinTone: '#d7a077', hair: '#212121' },
+    story: [
+      "Ahoy! Captain Marina. You found the sea — most landlubbers never make it this far.",
+      'Water can\'t hurt you here, but you can\'t swim up it either. Build a bridge of planks!',
+      'Sand marks every shore. Follow a beach and it will lead you to open water.',
+      'Glass looks grand over water. Build a sea window and watch the blue through it.',
+      'The horizon never ends, sailor. Neither should you.',
+    ],
+  },
+  {
+    name: 'Goldie the Prospector', at: [34, -28],
+    skin: { shirt: '#f9a825', pants: '#5d4037', skinTone: '#e8b88a', hair: '#fdd835' },
+    story: [
+      "Well howdy! Goldie's the name, treasure's the game.",
+      'Watch the middle number top-left — that\'s how deep you are. Coal shows below 24.',
+      'Iron hides below 16, gold below 11 — and DIAMONDS below 7, right near the bedrock.',
+      'Dig a staircase down, never straight down. First rule of prospecting!',
+      'Strike diamond and you\'re rich, kid. Well — rich in bragging rights. Best kind.',
+    ],
+  },
+  {
+    name: 'Brixton the Builder-Bot', at: [-30, -20],
+    skin: { shirt: '#e53935', pants: '#fbc02d', skinTone: '#b0bec5', hair: '#78909c' },
+    story: [
+      'BEEP. GREETINGS. I am BRIXTON, unit of building. I love bright plastic blocks.',
+      'PRESS E. Your block bag holds every block — red, blue, yellow, green plastic included.',
+      'TIP: number keys 1 to 9 swap your hotbar fast. Efficiency increased 340 percent.',
+      'My dream: a rainbow tower to the clouds. Assist? BEEP.',
+      'You build well, friend. My circuits are... proud? Yes. Proud.',
+    ],
+  },
+  {
+    name: 'Nova the Explorer', at: [-48, 36],
+    skin: { shirt: '#00897b', pants: '#3e2723', skinTone: '#f0c8a0', hair: '#d84315' },
+    story: [
+      "You walked all the way out here? You're my kind of person. I'm Nova.",
+      'The fog hides the far lands — walk toward it and it keeps giving you more world.',
+      'I leave plastic towers as trail markers so I can find my way home. Try it!',
+      '{SEA}',
+      'Every explorer needs a story. Go make yours bigger.',
+    ],
+  },
+];
+
+const FAR_DINO_DEFS = [
+  {
+    name: 'Rex the Robo-Dino', dino: true, scale: 1.3, hide: '#78909c', belly: '#ef5350', at: [52, 18],
+    story: [
+      'CLANK. RAWR.EXE running. I am REX. Part dinosaur. Part machine. All friend.',
+      'Blaze and Cinder are my cousins. The fire? It runs in the family. Even for robots.',
+      'My scanners see ore through stone. Sadly my warranty forbids telling you where. Dig!',
+      'CLANK. Return anytime. My fire keeps the far hills warm.',
     ],
   },
 ];
@@ -248,13 +321,55 @@ class NPC {
   }
 }
 
+const DIR_NAMES = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'];
+
+// compass name for a world-space offset (-z is north)
+export function dirName(dx, dz) {
+  const a = Math.atan2(dx, -dz); // 0 = north, clockwise
+  return DIR_NAMES[((Math.round(a / (Math.PI / 4)) % 8) + 8) % 8];
+}
+
+// ring-scan outward for the nearest sea-level water column
+export function findSea(world, spawnX, spawnZ) {
+  for (let r = 8; r <= 120; r += 4) {
+    for (let a = 0; a < 24; a++) {
+      const x = spawnX + Math.round(Math.cos((a / 24) * 2 * Math.PI) * r);
+      const z = spawnZ + Math.round(Math.sin((a / 24) * 2 * Math.PI) * r);
+      if (world.getBlock(x, 21, z) === BLOCKS.WATER && world.getBlock(x, 22, z) === BLOCKS.AIR) {
+        return { x, z, dist: r, dir: dirName(x - spawnX, z - spawnZ) };
+      }
+    }
+  }
+  return null;
+}
+
 export function initNPCs(world, scene, spawnX, spawnZ) {
-  // ponytail: fixed offsets near spawn; roaming spawn logic when world grows
+  const sea = findSea(world, spawnX, spawnZ);
+  const seaText = sea
+    ? `The sea is about ${sea.dist} blocks ${sea.dir} of the spawn meadow — follow the sand`
+    : 'There is a sea somewhere past the low lands — sand means water is close';
+
+  const fill = (def) => ({
+    ...def,
+    story: def.story.map(line => line.replace('{SEA}', seaText + '.')),
+  });
+
+  // meadow crew near spawn
   const spots = [[6, 3], [-5, 6], [3, -7]];
-  const villagers = NPC_DEFS.map((def, i) => new NPC(def, world, scene, spawnX + spots[i][0], spawnZ + spots[i][1]));
+  const npcs = NPC_DEFS.map((def, i) => new NPC(fill(def), world, scene, spawnX + spots[i][0], spawnZ + spots[i][1]));
   const dinoSpots = [[12, -4], [-10, -9]];
-  const dinos = DINO_DEFS.map((def, i) => new NPC(def, world, scene, spawnX + dinoSpots[i][0], spawnZ + dinoSpots[i][1]));
-  return [...villagers, ...dinos];
+  DINO_DEFS.forEach((def, i) => npcs.push(new NPC(fill(def), world, scene, spawnX + dinoSpots[i][0], spawnZ + dinoSpots[i][1])));
+
+  // characters spread across the land
+  for (const def of FAR_DEFS) {
+    let [dx, dz] = def.at ?? [40, 40];
+    if (def.name === 'Captain Marina' && sea) { dx = sea.x - spawnX; dz = sea.z - spawnZ; }
+    npcs.push(new NPC(fill(def), world, scene, spawnX + dx, spawnZ + dz));
+  }
+  for (const def of FAR_DINO_DEFS) {
+    npcs.push(new NPC(fill(def), world, scene, spawnX + def.at[0], spawnZ + def.at[1]));
+  }
+  return { npcs, seaText };
 }
 
 export function updateNPCs(npcs, dt, playerPos) {

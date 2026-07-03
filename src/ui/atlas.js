@@ -98,6 +98,46 @@ function water(x, y, rand) {
   return shade([52, 95, 218], wave * (0.92 + rand() * 0.12));
 }
 
+function cobble(x, y, rand) {
+  // rounded stone lumps on darker joints
+  const lump = ((x >> 2) * 5 + (y >> 2) * 3) % 4;
+  const edge = x % 4 === 0 || y % 4 === 0;
+  if (edge) return shade([90, 90, 90], 0.9 + rand() * 0.15);
+  return shade([120 + lump * 8, 120 + lump * 8, 120 + lump * 8], 0.9 + rand() * 0.18);
+}
+function brick(x, y, rand) {
+  const my = y % 4 === 3;
+  const row = Math.floor(y / 4);
+  const mx = (x + (row % 2 ? 4 : 0)) % 8 === 7;
+  if (mx || my) return shade([190, 180, 170], 0.92 + rand() * 0.12); // mortar
+  return shade([158, 66, 48], pick(rand, [0.88, 0.95, 1.0, 1.06]));
+}
+function snow(x, y, rand) {
+  return shade([240, 246, 250], pick(rand, [0.94, 0.97, 1.0]));
+}
+function ice(x, y, rand) {
+  const streak = (x + y * 2) % 7 === 0 ? 1.12 : 1.0;
+  return shade([160, 205, 235], streak * (0.92 + rand() * 0.1));
+}
+function obsidian(x, y, rand) {
+  const fleck = rand() > 0.9;
+  if (fleck) return shade([90, 60, 130], 1.0);
+  return shade([28, 22, 40], 0.85 + rand() * 0.3);
+}
+function plastic(base) {
+  return (x, y, rand) => {
+    // Roblox-style stud: raised circle, light from top-left
+    const dx = x - 7.5, dy = y - 7.5;
+    const r = Math.sqrt(dx * dx + dy * dy);
+    let f = 1.0;
+    if (r < 4.5) f = dx + dy < 0 ? 1.25 : 0.85;      // stud highlight/shadow
+    else if (r < 5.5) f = 0.75;                       // stud rim
+    if (x === 0 || y === 0) f *= 1.12;                // top/left bevel
+    if (x === 15 || y === 15) f *= 0.8;               // bottom/right bevel
+    return shade(base, f * (0.98 + rand() * 0.04));
+  };
+}
+
 // tile key 'col,row' -> painter, matching BLOCK_DEFS UV coords
 const TILE_PAINTERS = {
   '0,0':  grassTop,
@@ -116,6 +156,17 @@ const TILE_PAINTERS = {
   '13,0': oreIn([196, 160, 120]),// iron
   '14,0': bedrock,
   '15,0': water,
+  '0,1':  cobble,
+  '1,1':  brick,
+  '2,1':  snow,
+  '3,1':  ice,
+  '4,1':  oreIn([235, 190, 52]), // gold
+  '5,1':  oreIn([92, 220, 230]), // diamond
+  '6,1':  obsidian,
+  '7,1':  plastic([214, 45, 48]),  // red
+  '8,1':  plastic([13, 105, 208]), // blue
+  '9,1':  plastic([245, 205, 48]), // yellow
+  '10,1': plastic([76, 175, 80]),  // green
 };
 
 let _canvas = null;

@@ -3,7 +3,7 @@ import { Renderer } from './engine/renderer.js';
 import { Player } from './game/player.js';
 import { initTouchControls } from './game/touch.js';
 import { initNPCs, updateNPCs, buildVillager, makeNameSprite } from './game/npc.js';
-import { initHUD, initHints } from './ui/hud.js';
+import { initHUD, initHints, initInventory } from './ui/hud.js';
 import { BLOCKS } from './constants/blocks.js';
 import {
   watchAuth, signUp, logIn, playAsGuest, logOut, playerName,
@@ -30,7 +30,8 @@ function startGame(user, chosenName) {
   const renderer = new Renderer(canvas);
   const player   = new Player(world, renderer.camera);
 
-  initHUD();
+  initHUD(player);
+  initInventory(player);
   initTouchControls(player);
   window.__game = { world, player, renderer }; // E2E test hook
 
@@ -109,9 +110,9 @@ function startGame(user, chosenName) {
 
   loadChunksAround(player.position.x, player.position.z);
 
-  const npcs = initNPCs(world, renderer.scene, 8, 8);
+  const { npcs, seaText } = initNPCs(world, renderer.scene, 8, 8);
   window.__game.npcs = npcs;
-  initHints();
+  initHints({ seaText });
 
   let lastCX = Math.floor(player.position.x / 16);
   let lastCZ = Math.floor(player.position.z / 16);
@@ -150,7 +151,8 @@ function startGame(user, chosenName) {
     const info = document.getElementById('info');
     if (info) {
       const p = player.position;
-      info.textContent = `${myName} · XYZ: ${p.x.toFixed(1)} ${p.y.toFixed(1)} ${p.z.toFixed(1)}  FPS: ${Math.round(1/dt)}`;
+      const compass = 'N NE E SE S SW W NW'.split(' ')[((Math.round(-player._yaw / (Math.PI / 4)) % 8) + 8) % 8];
+      info.textContent = `${myName} · XYZ: ${p.x.toFixed(1)} ${p.y.toFixed(1)} ${p.z.toFixed(1)} · Facing ${compass} · FPS: ${Math.round(1/dt)}`;
     }
 
     renderer.render();

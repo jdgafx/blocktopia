@@ -38,7 +38,10 @@ export class Player {
   }
 
   _bindEvents() {
-    document.addEventListener('click', () => {
+    document.addEventListener('click', (e) => {
+      // clicks on UI panels must not grab the mouse
+      if (e.target.closest('#inventory, #auth-screen, #btn-logout, #btn-bag')) return;
+      if (document.getElementById('inventory')?.style.display === 'flex') return;
       if (!document.pointerLockElement) {
         document.getElementById('click-to-play')?.remove();
         document.body.requestPointerLock();
@@ -52,7 +55,11 @@ export class Player {
       this._pitch  = Math.max(-HALF_PI, Math.min(HALF_PI, this._pitch));
     });
 
-    document.addEventListener('keydown', (e) => { this._keys[e.code] = true; });
+    document.addEventListener('keydown', (e) => {
+      this._keys[e.code] = true;
+      const digit = e.code.match(/^Digit([1-9])$/);
+      if (digit) { this.hotbarIdx = Number(digit[1]) - 1; this._updateHotbarUI(); }
+    });
     document.addEventListener('keyup',   (e) => { this._keys[e.code] = false; });
 
     document.addEventListener('mousedown', (e) => {

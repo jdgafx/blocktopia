@@ -1,5 +1,5 @@
 import { createNoise2D } from 'simplex-noise';
-import { BLOCKS } from '../constants/blocks.js';
+import { BLOCKS, BLOCK_DEFS } from '../constants/blocks.js';
 
 export const CHUNK_W = 16;
 export const CHUNK_H = 64;
@@ -79,8 +79,11 @@ export class World {
         for (let y = 1; y <= clampedH; y++) {
           if (y < clampedH - 3) {
             const ore = this._noise(wx * 3.1 + y, wz * 2.7 + y);
-            if (ore > 0.75 && y < 20)      chunk.setBlock(x, y, z, BLOCKS.COAL_ORE);
-            else if (ore > 0.8 && y < 12)  chunk.setBlock(x, y, z, BLOCKS.IRON_ORE);
+            // rarest + deepest first, or shallow branches shadow the deep ones
+            if (ore > 0.88 && y < 7)        chunk.setBlock(x, y, z, BLOCKS.DIAMOND_ORE);
+            else if (ore > 0.84 && y < 11)  chunk.setBlock(x, y, z, BLOCKS.GOLD_ORE);
+            else if (ore > 0.8 && y < 16)   chunk.setBlock(x, y, z, BLOCKS.IRON_ORE);
+            else if (ore > 0.75 && y < 24)  chunk.setBlock(x, y, z, BLOCKS.COAL_ORE);
             else                            chunk.setBlock(x, y, z, BLOCKS.STONE);
           } else if (y < clampedH) {
             chunk.setBlock(x, y, z, BLOCKS.DIRT);
@@ -139,25 +142,7 @@ export class World {
   }
 
   isSolid(wx, wy, wz) {
-    const id = this.getBlock(wx, wy, wz);
-    return BLOCK_SOLID[id] ?? false;
+    // single source of truth: solidity comes from BLOCK_DEFS
+    return BLOCK_DEFS[this.getBlock(wx, wy, wz)]?.solid ?? false;
   }
 }
-
-const BLOCK_SOLID = {
-  0: false,  // AIR
-  1: true,   // GRASS
-  2: true,   // DIRT
-  3: true,   // STONE
-  4: true,   // WOOD_LOG
-  5: true,   // LEAVES
-  6: true,   // SAND
-  7: true,   // GRAVEL
-  8: true,   // PLANKS
-  9: true,   // STONE_BRICK
-  10: true,  // GLASS
-  11: true,  // COAL_ORE
-  12: true,  // IRON_ORE
-  13: true,  // BEDROCK
-  14: false, // WATER
-};

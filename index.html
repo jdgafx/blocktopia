@@ -120,6 +120,30 @@
       padding: 6px 12px; border-radius: 6px; border: none; cursor: pointer;
       background: rgba(0,0,0,0.5); color: #fff; font-size: 12px;
     }
+    #inventory {
+      position: fixed; inset: 0; z-index: 60;
+      background: rgba(0,0,0,0.6);
+      display: none; align-items: center; justify-content: center;
+    }
+    #inventory-panel {
+      background: rgba(28,24,20,0.95); border: 2px solid #666; border-radius: 12px;
+      padding: 18px; max-width: min(560px, 92vw);
+    }
+    #inventory-panel h2 { color: #fff; font-size: 18px; margin-bottom: 4px; }
+    #inventory-panel p { color: #aaa; font-size: 12px; margin-bottom: 12px; }
+    #inventory-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, 48px); gap: 8px;
+      justify-content: center;
+    }
+    .inv-cell {
+      width: 48px; height: 48px; border: 2px solid #777; border-radius: 6px;
+      cursor: pointer;
+    }
+    .inv-cell:hover { border-color: #fff; transform: scale(1.08); }
+    #inventory-close {
+      margin-top: 14px; width: 100%; padding: 9px; border: none; border-radius: 6px;
+      background: #4caf50; color: #fff; font-weight: bold; cursor: pointer;
+    }
   </style>
 </head>
 <body>
@@ -161,9 +185,20 @@
 
   <div id="touch-controls">
     <div id="joystick-zone"><div id="joystick-knob"></div></div>
-    <div class="touch-btn" id="btn-jump">↑</div>
-    <div class="touch-btn" id="btn-break">⛏</div>
-    <div class="touch-btn" id="btn-place">🧱</div>
+    <div class="touch-btn" id="btn-jump" title="Jump">↑</div>
+    <div class="touch-btn" id="btn-break" title="Break block">⛏</div>
+    <div class="touch-btn" id="btn-place" title="Place block">🧱</div>
+  </div>
+
+  <div class="touch-btn" id="btn-bag" style="position:fixed; top:8px; left:50%; transform:translateX(-50%); z-index:50; pointer-events:all;" title="Open your block bag (or press E)">🎒</div>
+
+  <div id="inventory">
+    <div id="inventory-panel">
+      <h2>Block Bag</h2>
+      <p>Click a block to put it in your selected hotbar slot. Press E or Esc to close.</p>
+      <div id="inventory-grid"></div>
+      <button id="inventory-close" title="Back to the game">Done</button>
+    </div>
   </div>
 
   <script type="module" src="/src/main.js"></script>
