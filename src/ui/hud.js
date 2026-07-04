@@ -15,6 +15,7 @@ export function initHints(facts = {}) {
     facts.seaText || 'There is a sea at the low lands — sand means water is close',
     'Watch the Y number top-left: dig below 24 for coal, deeper for iron, gold, then diamond',
     'People and dinosaurs with name tags have stories — walk right up and they talk',
+    "Blaze the T-Rex lost his herd in the storm — find all 6 dinosaurs to reunite them",
     'Everything you build is live — friends on this page see it instantly',
     'Fall off the world? No worries — you wake up back at the spawn meadow',
   ];

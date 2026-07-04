@@ -1,9 +1,14 @@
 import * as THREE from 'three';
 
-// Procedural 16x16 Minecraft-style textures painted into a 256x256 atlas.
+// Procedural Minecraft-style textures. Painters think in classic 16x16
+// coordinates, but each tile is rendered at 64x64 (4x supersampled): the
+// structure (bands, studs, mortar) stays 16-grid while per-pixel grain gets
+// 4x finer — "HD texture pack" look with zero external assets.
 // Deterministic: seeded RNG so every build renders identical textures.
-const TILE = 16;
-const SIZE = 256;
+const TILE = 16;      // painter coordinate space
+const SS = 4;         // supersample factor
+const OUT = TILE * SS; // rendered tile size (64)
+const SIZE = OUT * 16; // atlas: 16x16 tiles (1024)
 const ATLAS_SEED = 1337;
 
 function mulberry32(a) {
@@ -52,8 +57,10 @@ function logSide(x, y, rand) {
   return shade([104, 82, 49], stripe * (0.92 + rand() * 0.16));
 }
 function leaves(x, y, rand) {
-  const r = rand();
-  if (r > 0.86) return [0, 0, 0, 0]; // see-through holes (alphaTest)
+  // holes decided per coarse 16-grid cell (hash, not rand) so they stay
+  // chunky and readable instead of dissolving into 64px speckle
+  const h = ((x * 374761393 + y * 668265263) ^ 2654435761) >>> 0;
+  if ((h % 100) > 86) return [0, 0, 0, 0]; // see-through holes (alphaTest)
   return shade([58, 122, 44], pick(rand, [0.7, 0.85, 1.0, 1.15]));
 }
 function sand(x, y, rand) {
@@ -193,19 +200,20 @@ export function getAtlasCanvas() {
   _canvas.width = SIZE;
   _canvas.height = SIZE;
   const ctx = _canvas.getContext('2d');
-  const img = ctx.createImageData(TILE, TILE);
+  const img = ctx.createImageData(OUT, OUT);
 
   for (const [key, paint] of Object.entries(TILE_PAINTERS)) {
     const [col, row] = key.split(',').map(Number);
     const rand = mulberry32(ATLAS_SEED + col * 31 + row * 7);
-    for (let y = 0; y < TILE; y++) {
-      for (let x = 0; x < TILE; x++) {
-        const [r, g, b, a] = paint(x, y, rand);
-        const i = (y * TILE + x) * 4;
+    for (let y = 0; y < OUT; y++) {
+      for (let x = 0; x < OUT; x++) {
+        // structure coords stay on the 16 grid; rand() runs per output pixel
+        const [r, g, b, a] = paint((x / SS) | 0, (y / SS) | 0, rand);
+        const i = (y * OUT + x) * 4;
         img.data[i] = r; img.data[i + 1] = g; img.data[i + 2] = b; img.data[i + 3] = a;
       }
     }
-    ctx.putImageData(img, col * TILE, row * TILE);
+    ctx.putImageData(img, col * OUT, row * OUT);
   }
   return _canvas;
 }
@@ -216,7 +224,7 @@ export function tileDataURL(col, row) {
   c.width = 32; c.height = 32;
   const ctx = c.getContext('2d');
   ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(getAtlasCanvas(), col * TILE, row * TILE, TILE, TILE, 0, 0, 32, 32);
+  ctx.drawImage(getAtlasCanvas(), col * OUT, row * OUT, OUT, OUT, 0, 0, 32, 32);
   return c.toDataURL();
 }
 

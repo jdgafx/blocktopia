@@ -3,7 +3,8 @@ import { World } from './engine/world.js';
 import { Renderer } from './engine/renderer.js';
 import { Player } from './game/player.js';
 import { initTouchControls } from './game/touch.js';
-import { initNPCs, updateNPCs, buildVillager, makeNameSprite } from './game/npc.js';
+import { initNPCs, updateNPCs, buildVillager, makeNameSprite, HERD_NAMES } from './game/npc.js';
+import { loadModels, spawnModel } from './game/models.js';
 import { initHUD, initHints, initInventory } from './ui/hud.js';
 import { createExplosions } from './game/explosions.js';
 import { BLOCKS } from './constants/blocks.js';
@@ -26,6 +27,7 @@ function avatarSkin(uid) {
 }
 
 function startGame(user, chosenName) {
+  loadModels(); // prefetch rigged characters; NPCs/avatars attach when ready
   const myName = user.displayName || chosenName || playerName(user);
   const canvas   = document.getElementById('canvas');
   const world    = new World(SEED);
@@ -55,10 +57,20 @@ function startGame(user, chosenName) {
   const remotes = new Map(); // uid -> { group, target }
   const net = joinWorld(user, {
     onPlayerJoin(uid, data) {
-      const group = buildVillager({ skin: avatarSkin(uid) });
+      const skin = avatarSkin(uid);
+      const group = new THREE.Group();
       group.add(makeNameSprite(data.name || 'Player'));
+      const r = { group, target: { x: data.x, y: data.y, z: data.z, yaw: data.yaw || 0 } };
+      // animated character when models are ready; blocky villager otherwise
+      loadModels().then(ok => {
+        if (!remotes.has(uid)) return; // left before models arrived
+        const tint = '#' + new THREE.Color(skin.shirt).lerp(new THREE.Color('#ffffff'), 0.55).getHexString();
+        const m = ok && spawnModel('character', { height: 1.8, tint });
+        if (m) { r.anim = m; group.add(m.group); }
+        else group.add(buildVillager({ skin }));
+      });
       renderer.scene.add(group);
-      remotes.set(uid, { group, target: { x: data.x, y: data.y, z: data.z, yaw: data.yaw || 0 } });
+      remotes.set(uid, r);
     },
     onPlayerMove(uid, data) {
       const r = remotes.get(uid);
@@ -173,7 +185,7 @@ function startGame(user, chosenName) {
       questState[id] = true;
       localStorage.setItem('blocktopia-quests', JSON.stringify(questState));
     }
-    if (['q-talk', 'q-break', 'q-bag', 'q-place', 'q-sea'].every(q => questState[q])) {
+    if (['q-talk', 'q-break', 'q-bag', 'q-place', 'q-sea', 'q-dinos'].every(q => questState[q])) {
       const h = quests.querySelector('h3');
       if (h) h.textContent = '🎉 Quests complete! The world is yours';
     }
@@ -185,6 +197,17 @@ function startGame(user, chosenName) {
     if (d === 'place') markQuest('q-place');
     if (d === 'bag') markQuest('q-bag');
     if (d.startsWith?.('talk:Mira')) markQuest('q-talk');
+    if (d.startsWith?.('talk:')) {
+      const who = d.slice(5);
+      if (HERD_NAMES.includes(who)) {
+        questState['dino:' + who] = true;
+        localStorage.setItem('blocktopia-quests', JSON.stringify(questState));
+        const met = HERD_NAMES.filter(n => questState['dino:' + n]).length;
+        const li = document.getElementById('q-dinos');
+        if (li && met < HERD_NAMES.length) li.textContent = `Reunite Blaze's herd (${met}/${HERD_NAMES.length} dinos met)`;
+        if (met === HERD_NAMES.length) markQuest('q-dinos');
+      }
+    }
   });
 
   let lastCX = Math.floor(player.position.x / 16);
@@ -202,10 +225,16 @@ function startGame(user, chosenName) {
     net.sendPosition(player.position, player._yaw);
     for (const r of remotes.values()) {
       // smooth remote motion toward last known state
-      r.group.position.x += (r.target.x - r.group.position.x) * Math.min(1, dt * 10);
-      r.group.position.y += (r.target.y - r.group.position.y) * Math.min(1, dt * 10);
-      r.group.position.z += (r.target.z - r.group.position.z) * Math.min(1, dt * 10);
+      const gp = r.group.position;
+      const lagXZ = Math.hypot(r.target.x - gp.x, r.target.z - gp.z);
+      gp.x += (r.target.x - gp.x) * Math.min(1, dt * 10);
+      gp.y += (r.target.y - gp.y) * Math.min(1, dt * 10);
+      gp.z += (r.target.z - gp.z) * Math.min(1, dt * 10);
       r.group.rotation.y = r.target.yaw;
+      if (r.anim) {
+        r.anim.play(lagXZ > 0.15 ? 'Walk' : 'Idle');
+        r.anim.update(dt);
+      }
     }
 
     // Safety: respawn if player falls through the world
