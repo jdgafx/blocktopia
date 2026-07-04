@@ -106,26 +106,75 @@ function startGame(user, chosenName) {
     }
   }
 
-  // Pass 1: find highest solid non-tree terrain block at spawn column
+  // Spawn: spiral out from (8,8) for a column whose top terrain block has
+  // nothing but air above it (open sky) — never bury a new player in a pit
+  // or under a tree canopy.
   const TREE_IDS = new Set([BLOCKS.LEAVES, BLOCKS.WOOD_LOG]);
-  let surfaceY = 2;
-  for (let y = 62; y >= 1; y--) {
-    const id = world.getBlock(8, y, 8);
-    if (id !== 0 && !TREE_IDS.has(id)) { surfaceY = y; break; }
+  const _colCache = new Map();
+  function openColumnY(x, z) {
+    const k = x + ',' + z;
+    if (_colCache.has(k)) return _colCache.get(k);
+    let surfaceY = 0;
+    let out = null;
+    for (let y = 62; y >= 1; y--) {
+      const id = world.getBlock(x, y, z);
+      if (id !== 0 && !TREE_IDS.has(id)) { surfaceY = y; break; }
+    }
+    if (surfaceY > 0 && world.getBlock(x, surfaceY, z) !== BLOCKS.WATER) {
+      out = surfaceY + 1;
+      for (let y = surfaceY + 1; y < 63; y++) {
+        if (world.getBlock(x, y, z) !== 0) { out = null; break; } // canopy/overhang
+      }
+    }
+    _colCache.set(k, out);
+    return out;
   }
-  // Pass 2: scan upward from surface until 2 consecutive air blocks found
-  let spawnY = surfaceY + 1;
-  for (let y = surfaceY + 1; y < 63; y++) {
-    if (world.getBlock(8, y, 8) === 0 && world.getBlock(8, y + 1, 8) === 0) {
-      spawnY = y;
-      break;
+  // a real clearing: the column and the full 5x5 around it open to the sky,
+  // so no tree canopy crowds the first frame a new player ever sees
+  function columnSpawnY(x, z) {
+    const y = openColumnY(x, z);
+    if (y === null) return null;
+    for (let dx = -2; dx <= 2; dx++) {
+      for (let dz = -2; dz <= 2; dz++) {
+        if (openColumnY(x + dx, z + dz) === null) return null;
+      }
+    }
+    return y;
+  }
+  let spawn = { x: 8, z: 8, y: 30 };
+  outer: for (let r = 0; r <= 40; r++) {
+    for (let dx = -r; dx <= r; dx++) {
+      for (let dz = -r; dz <= r; dz++) {
+        if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue;
+        const y = columnSpawnY(8 + dx, 8 + dz);
+        if (y !== null) { spawn = { x: 8 + dx, z: 8 + dz, y }; break outer; }
+      }
     }
   }
-  player.position.set(8.5, spawnY, 8.5); // block-centered: AABB stays in one column
+  const spawnY = spawn.y;
+  player.position.set(spawn.x + 0.5, spawnY, spawn.z + 0.5); // block-centered: AABB stays in one column
+
+  // first impression: face the longest unobstructed eye-level sightline
+  {
+    let bestYaw = 0, bestScore = -1;
+    for (let a = 0; a < 8; a++) {
+      const yaw = a * Math.PI / 4;
+      const dx = -Math.sin(yaw), dz = -Math.cos(yaw);
+      let score = 0;
+      for (let d = 1; d <= 14; d++) {
+        const bx = Math.floor(spawn.x + 0.5 + dx * d);
+        const bz = Math.floor(spawn.z + 0.5 + dz * d);
+        if (world.isSolid(bx, spawnY + 1, bz) || world.getBlock(bx, spawnY + 2, bz) !== 0) break;
+        score = d;
+      }
+      if (score > bestScore) { bestScore = score; bestYaw = yaw; }
+    }
+    player._yaw = bestYaw;
+  }
 
   loadChunksAround(player.position.x, player.position.z);
 
-  const { npcs, seaText } = initNPCs(world, renderer.scene, 8, 8);
+  const { npcs, seaText } = initNPCs(world, renderer.scene, spawn.x, spawn.z);
   window.__game.npcs = npcs;
   initHints({ seaText });
 
@@ -204,7 +253,11 @@ function startGame(user, chosenName) {
         localStorage.setItem('blocktopia-quests', JSON.stringify(questState));
         const met = HERD_NAMES.filter(n => questState['dino:' + n]).length;
         const li = document.getElementById('q-dinos');
-        if (li && met < HERD_NAMES.length) li.textContent = `Reunite Blaze's herd (${met}/${HERD_NAMES.length} dinos met)`;
+        if (li) {
+          li.textContent = met === HERD_NAMES.length
+            ? `Reunite Blaze's herd (6/6 — herd reunited!)`
+            : `Reunite Blaze's herd (${met}/${HERD_NAMES.length} dinos met)`;
+        }
         if (met === HERD_NAMES.length) markQuest('q-dinos');
       }
     }
@@ -239,7 +292,7 @@ function startGame(user, chosenName) {
 
     // Safety: respawn if player falls through the world
     if (player.position.y < -20) {
-      player.position.set(8.5, spawnY, 8.5); // block-centered: AABB stays in one column
+      player.position.set(spawn.x + 0.5, spawnY, spawn.z + 0.5); // block-centered: AABB stays in one column
       player._physics._vy = 0;
     }
 

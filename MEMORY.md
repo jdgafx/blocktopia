@@ -34,6 +34,15 @@ Three.js voxel game (Minecraft-style), vanilla JS + Vite. Repo: https://github.c
 - Intro story overlay (first visit only, localStorage 'blocktopia-intro-seen') + 5 starter quests panel (talk to Mira/break/bag/place/find sea), CustomEvent('quest') emitters in player/npc/hud, state in localStorage 'blocktopia-quests'. Gotcha fixed: markQuest must add .done class BEFORE the already-done guard or restore no-ops.
 - megatest.mjs (scratchpad) covers all of round 3 vs localhost or live.
 
+## High-res round 4 (2026-07-03, commit 260688f, deployed)
+- Rigged animated glTF characters (Quaternius CC0, downloaded from raw.githubusercontent.com/trebeljahr/quaternius-showcase) in `public/models/` (~6.5MB, 10 GLBs). `src/game/models.js`: loadModels (per-model failure isolation), spawnModel(name,{height,tint}) → clone via SkeletonUtils + AnimationMixer; play/playOnce by clip-word match (shortest name containing word).
+- GOTCHAS (hard-won): (1) raw GLB geometry is cm-scale, ×100 lives in bone matrices → Box3.setFromObject lies; use SkinnedMesh.computeBoundingBox() union for auto-scale. (2) gltf metalness 0.4 + no env map = black models → set material.metalness=0. (3) Adventurer GLBs (modular men/women) have NO animations — don't use.
+- 16 NPCs all model-backed w/ blocky fallback: villagers=Character tinted, Nova=CharacterCyber, Brixton=Robot(mech Mike), Sir Bricks-a-Lot=Knight (new), dinos=Trex/Velociraptor/Triceratops/Stegosaurus/Parasaurolophus/Apatosaurus. New herd dinos: Topsy[20,12], Spike[-18,16], Melody[26,-20], Titan[-26,-30] h4.6. Herd quest q-dinos: HERD_NAMES export, main.js counts 'talk:' events, li shows (n/6), included in all-done check.
+- Remote MP avatars = animated Character tinted by uid, Walk/Idle from target lag (main.js onPlayerJoin deferred model attach).
+- Renderer: ACESFilmic exposure 1.18, hemi 1.3 (0xe8f2ff/0xc7b299), sun 1.05 castShadow (desktop only, 2048 PCFSoft, ±56 ortho follows camera in render()), gradient sky dome ShaderMaterial follows cam, UnrealBloomPass 0.28/0.5/0.88 desktop-only via EffectComposer+OutputPass. Mobile: no shadows/bloom (fill rate).
+- Atlas: 64px/tile (4x supersample; painters keep 16-grid structure coords, rand() per out-pixel = finer grain; leaves holes now coarse-cell hash not rand). SIZE=1024.
+- TEST TRAP: swiftshader runs ~2-20fps → dt clamp 0.05 starves sim time → hold-to-break/swim/double-tap-flight probes fail falsely. Use sim-time waits (accumulate min(dt,0.05) via rAF). Double-tap flight untestable w/ synthetic events at low fps (tap gap stretches past 400ms window) — physics provable by setting player.flying directly. WATER block id = 14 (not 15).
+
 ## Testing
 - `window.__game = { world, player, renderer, npcs }` E2E hook in main.js.
 - Playwright MCP flaky here; use standalone scripts with `/home/chris2/dev/browser-automation/node_modules/playwright/index.mjs` + executablePath `/home/chris2/.cache/ms-playwright/chromium-1228/chrome-linux64/chrome` + `--enable-unsafe-swiftshader --no-sandbox` (WebGL in headless).
