@@ -43,6 +43,14 @@ Three.js voxel game (Minecraft-style), vanilla JS + Vite. Repo: https://github.c
 - Atlas: 64px/tile (4x supersample; painters keep 16-grid structure coords, rand() per out-pixel = finer grain; leaves holes now coarse-cell hash not rand). SIZE=1024.
 - TEST TRAP: swiftshader runs ~2-20fps → dt clamp 0.05 starves sim time → hold-to-break/swim/double-tap-flight probes fail falsely. Use sim-time waits (accumulate min(dt,0.05) via rAF). Double-tap flight untestable w/ synthetic events at low fps (tap gap stretches past 400ms window) — physics provable by setting player.flying directly. WATER block id = 14 (not 15).
 
+## Acceptance round (2026-07-03, commit 1af9801) — verifier re-check: PASS (all areas green live)
+- WATCH (open): intermittent >90s glTF model-load stall on some fresh loads (others ~2s, same build) — CDN/SwiftShader variance suspected; doesn't block, monitor.
+- acceptance-verifier FAILED round 1 on D1 "buried spawn": old 2-pass spawn scan put player in a pit under tree canopy at (8,29,8) — first frame was a dirt wall. Fix in main.js: spiral from (8,8) r≤40 for a column whose FULL 5x5 is open-to-sky (memoized openColumnY; water excluded) + auto-face the longest unobstructed sightline (8 yaws × 14-block probe). Landed at (5,34,9) facing W. NPC anchor + fall-respawn follow computed spawn.
+- D2: netlify.toml CSP connect-src needed `blob:` — GLTFLoader fetches embedded textures via fetch(blob:) governed by connect-src (not img-src). 3 console errors/load until fixed.
+- D3: herd label stuck at 5/6 (update guarded by met<6); now always writes, 6/6 shows "herd reunited!".
+- Camera yaw convention: yaw 0 faces -z (N); view dir = (-sin(yaw), -cos(yaw)); compass = -yaw/(π/4).
+- Live world has persistent player-placed junk near spawn (giant blue plastic etc. in Firebase /blocks) — screenshots may include it; not a bug.
+
 ## Testing
 - `window.__game = { world, player, renderer, npcs }` E2E hook in main.js.
 - Playwright MCP flaky here; use standalone scripts with `/home/chris2/dev/browser-automation/node_modules/playwright/index.mjs` + executablePath `/home/chris2/.cache/ms-playwright/chromium-1228/chrome-linux64/chrome` + `--enable-unsafe-swiftshader --no-sandbox` (WebGL in headless).
