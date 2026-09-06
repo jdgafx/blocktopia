@@ -40,15 +40,22 @@ export class Physics {
     return { x: pos.x + PLAYER_W / 2, y: pos.y + PLAYER_H, z: pos.z + PLAYER_W / 2 };
   }
 
+  _boxes(x, y, z, min, max) {
+    if (this._world.getCollisionBoxes) return this._world.getCollisionBoxes(x, y, z, min, max);
+    return this._world.isSolid(x, y, z) ? [{ min: { x, y, z }, max: { x: x + 1, y: y + 1, z: z + 1 } }] : [];
+  }
+
   _resolveX(pos) {
     const mn = this._aabbMin(pos);
     const mx = this._aabbMax(pos);
     for (let bx = Math.floor(mn.x); bx <= Math.floor(mx.x - 1e-6); bx++) {
       for (let by = Math.floor(mn.y); by <= Math.floor(mx.y - 1e-6); by++) {
         for (let bz = Math.floor(mn.z); bz <= Math.floor(mx.z - 1e-6); bz++) {
-          if (!this._world.isSolid(bx, by, bz)) continue;
-          if (pos.x > bx + 0.5) pos.x = bx + 1 + PLAYER_W / 2;
-          else                   pos.x = bx   - PLAYER_W / 2;
+          for (const box of this._boxes(bx, by, bz, mn, mx)) {
+            if (box.roof && pos.y >= box.max.y - .4) continue;
+            if (pos.x > (box.min.x + box.max.x) / 2) pos.x = box.max.x + PLAYER_W / 2;
+            else pos.x = box.min.x - PLAYER_W / 2;
+          }
         }
       }
     }
@@ -57,19 +64,22 @@ export class Physics {
   _resolveY(pos) {
     const mn = this._aabbMin(pos);
     const mx = this._aabbMax(pos);
-    let hitFloor = false;
+    const falling = this._vy < 0;
+    let boundary = falling ? -Infinity : Infinity;
     for (let bx = Math.floor(mn.x); bx <= Math.floor(mx.x - 1e-6); bx++) {
       for (let by = Math.floor(mn.y); by <= Math.floor(mx.y - 1e-6); by++) {
         for (let bz = Math.floor(mn.z); bz <= Math.floor(mx.z - 1e-6); bz++) {
-          if (!this._world.isSolid(bx, by, bz)) continue;
-          if (this._vy < 0) { pos.y = by + 1; hitFloor = true; }
-          else               { pos.y = by - PLAYER_H; }
-          this._vy = 0;
+          for (const box of this._boxes(bx, by, bz, mn, mx))
+            boundary = falling ? Math.max(boundary, box.max.y) : Math.min(boundary, box.min.y - PLAYER_H);
         }
       }
     }
-    this.onGround = hitFloor;
-    if (!hitFloor && this._vy <= 0) this.onGround = false;
+    const collided = Number.isFinite(boundary);
+    if (collided) {
+      pos.y = boundary;
+      this._vy = 0;
+    }
+    this.onGround = falling && collided;
   }
 
   _resolveZ(pos) {
@@ -78,9 +88,11 @@ export class Physics {
     for (let bx = Math.floor(mn.x); bx <= Math.floor(mx.x - 1e-6); bx++) {
       for (let by = Math.floor(mn.y); by <= Math.floor(mx.y - 1e-6); by++) {
         for (let bz = Math.floor(mn.z); bz <= Math.floor(mx.z - 1e-6); bz++) {
-          if (!this._world.isSolid(bx, by, bz)) continue;
-          if (pos.z > bz + 0.5) pos.z = bz + 1 + PLAYER_W / 2;
-          else                   pos.z = bz   - PLAYER_W / 2;
+          for (const box of this._boxes(bx, by, bz, mn, mx)) {
+            if (box.roof && pos.y >= box.max.y - .4) continue;
+            if (pos.z > (box.min.z + box.max.z) / 2) pos.z = box.max.z + PLAYER_W / 2;
+            else pos.z = box.min.z - PLAYER_W / 2;
+          }
         }
       }
     }

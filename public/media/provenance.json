@@ -1,0 +1,86 @@
+{
+  "provider": "Meta AI via authorized CNG browser",
+  "purpose": "Generated visual references and cinematic media. These are not playable game screenshots, PBR maps, or 3D models.",
+  "assets": [
+    {
+      "id": "forest-haven-video",
+      "file": "forest-haven-video.mp4",
+      "sha256": "043cf298df9919eeb7971551b6961e3e03dd0ff3c0d0054b0bc3c9c06b482c19",
+      "conversation_url": "https://www.meta.ai/prompt/6f385161-e25b-40db-b1fd-eaf3092dd2af",
+      "original_sha256": "b6df8eac0be66027f29cf3822ac877a1a77a016cb5304a2bc54c513be360be76",
+      "encoding": "FFmpeg libx264 CRF 24, slow, yuv420p, faststart; original resolution and duration retained"
+    },
+    {
+      "id": "forest-haven",
+      "file": "forest-haven.webp",
+      "sha256": "d83d82d59adc588e9cb18df03bbfb003b82c8724992729c2bc0bb517cb7e0b5a",
+      "conversation_url": "https://www.meta.ai/prompt/528f8fbb-fb36-45f0-aca7-fa34b883d9f5"
+    },
+    {
+      "id": "ivo-smith",
+      "file": "ivo-smith.webp",
+      "sha256": "f54858a7a3575fe3e92d4272f3aaed2afe44410ff3e09c1dbd7ae109d21564d1",
+      "conversation_url": "https://www.meta.ai/prompt/002227f9-79d2-4aaf-89aa-808bb0461566"
+    },
+    {
+      "id": "mara-ranger",
+      "file": "mara-ranger.webp",
+      "sha256": "fbadc35177200d5d4eae49e9a0e1bfa28ddd1287ae761630c0a30b92505aa021",
+      "conversation_url": "https://www.meta.ai/prompt/20227222-2d84-4f4c-a353-5d64de3d85cc"
+    },
+    {
+      "id": "neri-explorer",
+      "file": "neri-explorer.webp",
+      "sha256": "5076b2b9e588481fc9c71f3529f009356d414f16757bc62de99cbf2a6bc31c05",
+      "conversation_url": "https://www.meta.ai/prompt/afe9968e-a40b-4af8-b75a-4263d200f74a"
+    },
+    {
+      "id": "skyreach-ruins-video",
+      "file": "skyreach-ruins-video.mp4",
+      "sha256": "879a4931c8e10db739cf4d05c855858f0eda5658ce45803976f7d621368e49a4",
+      "conversation_url": "https://www.meta.ai/prompt/033e7531-0e45-4ef5-8ac1-0cedc1fd0a72",
+      "original_sha256": "36dd1dedd21287c314d4ad56c0093173e040218f550577d04c86aac7bbd951f5",
+      "encoding": "FFmpeg libx264 CRF 24, slow, yuv420p, faststart; original resolution and duration retained"
+    },
+    {
+      "id": "skyreach-ruins",
+      "file": "skyreach-ruins.webp",
+      "sha256": "7447c2b50a1bbca5f66a96b552fb2aa6e795c59e20629baac73a838d789314f8",
+      "conversation_url": "https://www.meta.ai/prompt/5758c08d-bb46-4a9e-887a-26f07f89eedf"
+    },
+    {
+      "id": "sol-keeper",
+      "file": "sol-keeper.webp",
+      "sha256": "c751e6bbbb795a2204032e78383a6ed09140a54a27415eb9582e874f37b87b55",
+      "conversation_url": "https://www.meta.ai/prompt/46b43d4d-489c-4568-ab77-2e1a78431c72"
+    },
+    {
+      "id": "sunstone-settlement-video",
+      "file": "sunstone-settlement-video.mp4",
+      "sha256": "ca222ae53798a468b8393ec1e5f98328da536769ce59e19cc35971273892ceb8",
+      "conversation_url": "https://www.meta.ai/prompt/4aabe993-fd89-4bbb-93f6-85ea0855d986",
+      "original_sha256": "70e8d476aff434d7e611a1a249e11804a9876ce5073bf0a121ffea0de89d15c6",
+      "encoding": "FFmpeg libx264 CRF 24, slow, yuv420p, faststart; original resolution and duration retained"
+    },
+    {
+      "id": "sunstone-settlement",
+      "file": "sunstone-settlement.webp",
+      "sha256": "89f9dcc4e4da02ccf96acfbfcaa570bb38045b5df1b64f7ddb6d72e39892691e",
+      "conversation_url": "https://www.meta.ai/prompt/f70fabb0-cbd1-4fa1-ada9-11b6bb98af4c"
+    },
+    {
+      "id": "tidal-glass-coast-video",
+      "file": "tidal-glass-coast-video.mp4",
+      "sha256": "85fcef9994c040e9bed811ec21c8fc18239b547a662900a19dad58e4763e15cd",
+      "conversation_url": "https://www.meta.ai/prompt/058fbd2e-3a82-405c-8dd5-6470a440450f",
+      "original_sha256": "489b7f981a99808a08358e9064a5aa2abded10a7d8ce9fbc8cb5d5d3d034a489",
+      "encoding": "FFmpeg libx264 CRF 24, slow, yuv420p, faststart; original resolution and duration retained"
+    },
+    {
+      "id": "tidal-glass-coast",
+      "file": "tidal-glass-coast.webp",
+      "sha256": "c03feaa70898bed2c4eab2af865a9b2768679b4e7d04ec364f5432675b5030f0",
+      "conversation_url": "https://www.meta.ai/prompt/8d31996f-4679-41f7-b3cb-3db9e97457c4"
+    }
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "tool": "Material Maker 1.7 source with Godot 4.7",
+  "source": "https://github.com/RodZill4/material-maker/tree/1.7",
+  "native_project": "scripts/materials/log-end.ptex",
+  "recipe": "scripts/materials/export-log-end.py",
+  "postprocess": "Pillow Lanczos downsample only; all channels rendered by Material Maker",
+  "exports": [
+    {
+      "file": "log-end-color.png",
+      "sha256": "eb466aeb6985ca731723e5e4e5f359513615e47c8c9dbf6130174e5804bf8ebe",
+      "raw_sha256": "21fa753acf7d8de2d01eb52aea8e9a4a35e149ffe21ad425248c125fd900ddef",
+      "raw_size": [
+        2048,
+        2048
+      ],
+      "size": [
+        512,
+        512
+      ]
+    },
+    {
+      "file": "log-end-normal.png",
+      "sha256": "faf9352a50898a0246b09c21f85d7c65ce5025d01198ffe1fc2630f40e2212bf",
+      "raw_sha256": "0b0b822b4cbb71abb6f24a7ce86f5e1e510f5faf494d327cdc88f906e4fb87d0",
+      "raw_size": [
+        2048,
+        2048
+      ],
+      "size": [
+        512,
+        512
+      ]
+    },
+    {
+      "file": "log-end-roughness.png",
+      "sha256": "5b607160c28f75c6935ddba4bb05f6c94986572b474c078c61f81fc03697d491",
+      "raw_sha256": "12a9194669dc0768d6ba38bad61806b1eaff7337fafe63cb0b709552b99caacd",
+      "raw_size": [
+        2048,
+        2048
+      ],
+      "size": [
+        512,
+        512
+      ]
+    }
+  ]
+}

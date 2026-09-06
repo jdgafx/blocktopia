@@ -1,0 +1,40 @@
+import { PROVISIONS as P } from './items.js';
+
+export const CREATURE_SPECIES = Object.freeze(Object.fromEntries([
+  { id: 'sauropod', label: 'Sauropod', habitats: ['hearthwood', 'tideglass'], diet: [P.FORAGE],
+    temperament: 'calm', health: 280, speed: .75, sprint: 1.6, radius: 1.45, height: 5.3, damage: 22, reach: 3.4,
+    carry: 120, weight: 2, prey: [], resources: { [P.RAW_MEAT]: 9, [P.HIDE]: 5 },
+    texture: '/textures/animals/sauropod-color.webp', help: 'A patient herd companion and guardian that carries 120 items.' },
+  { id: 'triceratops', label: 'Triceratops', habitats: ['hearthwood', 'amber-dunes', 'tideglass'], diet: [P.FORAGE],
+    temperament: 'calm', health: 170, speed: 1, sprint: 2.4, radius: 1.1, height: 2.5, damage: 18, reach: 2.4,
+    carry: 90, weight: 3, prey: [], resources: { [P.RAW_MEAT]: 6, [P.HIDE]: 3, [P.SCALE]: 2 },
+    texture: '/textures/animals/triceratops-color.webp', help: 'A loyal defender whose sturdy frame carries 90 items.' },
+  { id: 'raptor', label: 'Raptor', habitats: ['hearthwood', 'amber-dunes'], diet: [P.RAW_MEAT, P.COOKED_MEAT],
+    temperament: 'bold', health: 70, speed: 1.8, sprint: 4.2, radius: .65, height: 1.8, damage: 9, reach: 1.6,
+    carry: 20, weight: 3, prey: ['moonstag'], resources: { [P.RAW_MEAT]: 3, [P.HIDE]: 1, [P.FEATHER]: 1 },
+    help: 'A swift companion that defends its keeper and carries 20 items.' },
+  { id: 'stegosaur', label: 'Stegosaur', habitats: ['hearthwood', 'tideglass'], diet: [P.FORAGE],
+    temperament: 'calm', health: 140, speed: 1.05, sprint: 2.1, radius: 1.1, height: 2.5, damage: 15, reach: 2.3,
+    carry: 80, weight: 3, prey: [], resources: { [P.RAW_MEAT]: 5, [P.HIDE]: 3, [P.SCALE]: 2 },
+    help: 'A steady defender with room for 80 carried items.' },
+  { id: 'mammoth', label: 'Mammoth', habitats: ['frostspine', 'hearthwood'], diet: [P.FORAGE],
+    temperament: 'calm', health: 220, speed: .85, sprint: 1.8, radius: 1.45, height: 3.8, damage: 22, reach: 2.8,
+    carry: 120, weight: 2, prey: [], resources: { [P.RAW_MEAT]: 8, [P.HIDE]: 6 },
+    help: 'A powerful guardian and pack companion that carries 120 items.' },
+  { id: 'griffin', label: 'Griffin', habitats: ['frostspine', 'amber-dunes'], diet: [P.RAW_MEAT, P.COOKED_MEAT],
+    temperament: 'territorial', health: 130, speed: 1.4, sprint: 3.8, radius: .95, height: 2.4, damage: 16, reach: 2,
+    carry: 45, weight: 2, prey: ['raptor', 'moonstag'], resources: { [P.RAW_MEAT]: 4, [P.FEATHER]: 5, [P.HIDE]: 2 },
+    help: 'A vigilant ground companion that defends its keeper and carries 45 items.' },
+  { id: 'forest-dragon', label: 'Forest dragon', habitats: ['hearthwood'], diet: [P.RAW_MEAT, P.COOKED_MEAT],
+    temperament: 'territorial', health: 250, speed: 1.1, sprint: 2.8, radius: 1.4, height: 3.4, damage: 24, reach: 3,
+    carry: 80, weight: 1, prey: ['raptor', 'stegosaur'], resources: { [P.RAW_MEAT]: 8, [P.SCALE]: 6 },
+    help: 'A formidable ground guardian with room for 80 carried items.' },
+  { id: 'moonstag', label: 'Moonstag', habitats: ['hearthwood', 'tideglass', 'frostspine'], diet: [P.FORAGE],
+    temperament: 'shy', health: 60, speed: 1.5, sprint: 4.5, radius: .65, height: 2.5, damage: 7, reach: 1.5,
+    carry: 35, weight: 4, prey: [], resources: { [P.RAW_MEAT]: 3, [P.HIDE]: 2 },
+    help: 'A gentle pack companion that finds one extra portion whenever you forage together.' },
+].map(species => [species.id, Object.freeze({ ...species, capacity: species.carry, carryCapacity: species.carry, texture: species.texture ?? `/textures/creatures/${species.id}-color.webp`,
+  habitats: Object.freeze(species.habitats), diet: Object.freeze(species.diet), prey: Object.freeze(species.prey), resources: Object.freeze(species.resources) })])));
+export const SPECIES_IDS = Object.freeze(Object.keys(CREATURE_SPECIES));
+export const CREATURE_BEHAVIORS = Object.freeze(['grazing', 'wandering', 'hunting', 'fleeing', 'defending', 'social', 'following', 'staying', 'resting', 'dead']);
+export const SPECIES = CREATURE_SPECIES;

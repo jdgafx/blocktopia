@@ -1,5 +1,5 @@
 [build]
-  command = "npm run build"
+  command = "node scripts/check-hosted-env.mjs && npm run build"
   publish = "dist"
 
 [[redirects]]

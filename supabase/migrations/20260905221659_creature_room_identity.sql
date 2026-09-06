@@ -1,0 +1,11 @@
+CREATE TABLE public.blocktopia_room_actors (room_code text NOT NULL, peer_id uuid NOT NULL, user_id uuid DEFAULT auth.uid() NOT NULL);
+ALTER TABLE public.blocktopia_room_actors ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.blocktopia_room_actors ADD CONSTRAINT blocktopia_room_actors_pkey PRIMARY KEY (room_code, peer_id);
+ALTER TABLE public.blocktopia_room_actors ADD CONSTRAINT blocktopia_room_actors_room_code_check CHECK (room_code ~ '^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$'::text);
+ALTER TABLE public.blocktopia_room_actors ADD CONSTRAINT blocktopia_room_actors_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE;
+GRANT DELETE, INSERT, SELECT ON public.blocktopia_room_actors TO authenticated;
+GRANT MAINTAIN, REFERENCES, TRIGGER, TRUNCATE ON public.blocktopia_room_actors TO service_role;
+CREATE INDEX blocktopia_room_actors_user ON public.blocktopia_room_actors (user_id);
+CREATE POLICY "Players register their own identity" ON public.blocktopia_room_actors FOR INSERT TO authenticated WITH CHECK ((( SELECT auth.uid() AS uid) = user_id));
+CREATE POLICY "Players remove their own identity" ON public.blocktopia_room_actors FOR DELETE TO authenticated USING ((( SELECT auth.uid() AS uid) = user_id));
+CREATE POLICY "Players resolve room identities" ON public.blocktopia_room_actors FOR SELECT TO authenticated USING (true);

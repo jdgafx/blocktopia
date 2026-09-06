@@ -2,7 +2,7 @@ export function initTouchControls(player) {
   if (!('ontouchstart' in window) && navigator.maxTouchPoints === 0) return;
 
   const tc = document.getElementById('touch-controls');
-  if (tc) tc.style.display = 'block';
+  if (tc) { tc.style.display = 'block'; tc.hidden = true; }
 
   const zone  = document.getElementById('joystick-zone');
   const knob  = document.getElementById('joystick-knob');
@@ -11,6 +11,7 @@ export function initTouchControls(player) {
   let joystickOrigin = { x: 0, y: 0 };
 
   zone.addEventListener('touchstart', (e) => {
+    if (!player.active) return;
     e.preventDefault();
     const t = e.changedTouches[0];
     joystickId = t.identifier;
@@ -19,6 +20,7 @@ export function initTouchControls(player) {
   }, { passive: false });
 
   zone.addEventListener('touchmove', (e) => {
+    if (!player.active) return;
     e.preventDefault();
     for (const t of e.changedTouches) {
       if (t.identifier !== joystickId) continue;
@@ -48,6 +50,7 @@ export function initTouchControls(player) {
   let lastLook = { x: 0, y: 0 };
 
   document.addEventListener('touchstart', (e) => {
+    if (!player.active || e.target !== document.getElementById('canvas')) return;
     for (const t of e.changedTouches) {
       if (t.clientX < window.innerWidth * 0.4) continue;
       if (lookId !== null) continue;
@@ -57,6 +60,7 @@ export function initTouchControls(player) {
   });
 
   document.addEventListener('touchmove', (e) => {
+    if (!player.active || lookId === null) return;
     e.preventDefault();
     for (const t of e.changedTouches) {
       if (t.identifier !== lookId) continue;
@@ -70,20 +74,36 @@ export function initTouchControls(player) {
     }
   }, { passive: false });
 
-  document.addEventListener('touchend', (e) => {
+  const endLook = (e) => {
     for (const t of e.changedTouches) {
       if (t.identifier === lookId) lookId = null;
     }
-  });
+  };
+  document.addEventListener('touchend', endLook);
+  document.addEventListener('touchcancel', endLook);
 
   const btnJump  = document.getElementById('btn-jump');
   const btnBreak = document.getElementById('btn-break');
   const btnPlace = document.getElementById('btn-place');
 
-  btnJump.addEventListener('touchstart',  (e) => { e.preventDefault(); player.touchJump = true;  }, { passive: false });
-  btnJump.addEventListener('touchend',    (e) => { e.preventDefault(); player.touchJump = false; }, { passive: false });
-  btnBreak.addEventListener('touchstart', (e) => { e.preventDefault(); player.touchBreak = true;  }, { passive: false });
-  btnBreak.addEventListener('touchend',   (e) => { e.preventDefault(); player.touchBreak = false; }, { passive: false });
-  btnPlace.addEventListener('touchstart', (e) => { e.preventDefault(); player.touchPlace = true;  player._placing = true;  }, { passive: false });
-  btnPlace.addEventListener('touchend',   (e) => { e.preventDefault(); player.touchPlace = false; player._placing = false; }, { passive: false });
+  btnJump.addEventListener('touchstart', (e) => {
+    e.preventDefault(); if (player.active) player.touchJump = true;
+  }, { passive: false });
+  for (const event of ['touchend', 'touchcancel']) {
+    btnJump.addEventListener(event, (e) => { e.preventDefault(); player.touchJump = false; }, { passive: false });
+  }
+  for (const [button, kind] of [[btnBreak, 'break'], [btnPlace, 'place']]) {
+    button.addEventListener('touchstart', (e) => {
+      e.preventDefault(); player.beginInteraction(kind, true);
+    }, { passive: false });
+    for (const event of ['touchend', 'touchcancel']) {
+      button.addEventListener(event, (e) => {
+        e.preventDefault(); player.endInteraction(kind, true);
+        if (event === 'touchcancel') {
+          if (kind === 'break') player._breakQueued = false;
+          else player._placeQueued = 0;
+        }
+      }, { passive: false });
+    }
+  }
 }

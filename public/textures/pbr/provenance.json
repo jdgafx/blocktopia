@@ -1,0 +1,201 @@
+{
+  "license": "CC0-1.0",
+  "licenseUrl": "https://polyhaven.com/license",
+  "downloaded": "2026-09-05",
+  "resolution": "1024x1024",
+  "processing": "Original Poly Haven JPG downloads, unchanged. Color maps sRGB; OpenGL normal and roughness maps linear.",
+  "sources": [
+    {
+      "asset": "sparse_grass",
+      "kind": "Diffuse",
+      "file": "sparse_grass-color.jpg",
+      "size": 955945,
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/sparse_grass/sparse_grass_diff_1k.jpg",
+      "md5": "5d0aba796e1b5882555161c16b10ee9d"
+    },
+    {
+      "asset": "sparse_grass",
+      "kind": "nor_gl",
+      "file": "sparse_grass-normal.jpg",
+      "size": 1440314,
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/sparse_grass/sparse_grass_nor_gl_1k.jpg",
+      "md5": "3307e6ce47413c6b4e85885d4b8ae932"
+    },
+    {
+      "asset": "sparse_grass",
+      "kind": "Rough",
+      "file": "sparse_grass-roughness.jpg",
+      "size": 463340,
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/sparse_grass/sparse_grass_rough_1k.jpg",
+      "md5": "acf2fd7e352e7635f67f24ecda01e485"
+    },
+    {
+      "asset": "brown_mud_rocks_01",
+      "kind": "Diffuse",
+      "file": "brown_mud_rocks_01-color.jpg",
+      "size": 887215,
+      "md5": "19e4d0066282bd8439bdc713310bbbe4",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/brown_mud_rocks_01/brown_mud_rocks_01_diff_1k.jpg"
+    },
+    {
+      "asset": "brown_mud_rocks_01",
+      "kind": "nor_gl",
+      "file": "brown_mud_rocks_01-normal.jpg",
+      "size": 1400087,
+      "md5": "aea4a53ff5a38070e7dbda4feb81a0b9",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/brown_mud_rocks_01/brown_mud_rocks_01_nor_gl_1k.jpg"
+    },
+    {
+      "asset": "brown_mud_rocks_01",
+      "kind": "Rough",
+      "file": "brown_mud_rocks_01-roughness.jpg",
+      "size": 719533,
+      "md5": "db5dd3d5b7bc5230f89581c511a51dbd",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/brown_mud_rocks_01/brown_mud_rocks_01_rough_1k.jpg"
+    },
+    {
+      "asset": "rock_boulder_dry",
+      "kind": "Diffuse",
+      "file": "rock_boulder_dry-color.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/rock_boulder_dry/rock_boulder_dry_diff_1k.jpg",
+      "size": 859211,
+      "md5": "da794cd9be3db91e3160cf081109f322"
+    },
+    {
+      "asset": "rock_boulder_dry",
+      "kind": "nor_gl",
+      "file": "rock_boulder_dry-normal.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/rock_boulder_dry/rock_boulder_dry_nor_gl_1k.jpg",
+      "size": 802497,
+      "md5": "6f1c575ceed560ae253f65518cf748e2"
+    },
+    {
+      "asset": "rock_boulder_dry",
+      "kind": "Rough",
+      "file": "rock_boulder_dry-roughness.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/rock_boulder_dry/rock_boulder_dry_rough_1k.jpg",
+      "size": 668127,
+      "md5": "0c8b15df3e31c15256da5f8e1b0d0759"
+    },
+    {
+      "asset": "bark_brown_02",
+      "kind": "Diffuse",
+      "file": "bark_brown_02-color.jpg",
+      "size": 659592,
+      "md5": "6669cca520594bdca19f94084984ab72",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/bark_brown_02/bark_brown_02_diff_1k.jpg"
+    },
+    {
+      "asset": "bark_brown_02",
+      "kind": "nor_gl",
+      "file": "bark_brown_02-normal.jpg",
+      "size": 1015623,
+      "md5": "1cad3fe0349a44df2d4d1c2859c79920",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/bark_brown_02/bark_brown_02_nor_gl_1k.jpg"
+    },
+    {
+      "asset": "bark_brown_02",
+      "kind": "Rough",
+      "file": "bark_brown_02-roughness.jpg",
+      "size": 337946,
+      "md5": "bbcde696e5b9418cdcb2abe638965417",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/bark_brown_02/bark_brown_02_rough_1k.jpg"
+    },
+    {
+      "asset": "sand_01",
+      "kind": "Diffuse",
+      "file": "sand_01-color.jpg",
+      "size": 485088,
+      "md5": "c914c8edb419f040e04224081a3f79a5",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/sand_01/sand_01_diff_1k.jpg"
+    },
+    {
+      "asset": "sand_01",
+      "kind": "nor_gl",
+      "file": "sand_01-normal.jpg",
+      "size": 877821,
+      "md5": "369b82aa417c77ec85c4c07c4c7b60a0",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/sand_01/sand_01_nor_gl_1k.jpg"
+    },
+    {
+      "asset": "sand_01",
+      "kind": "Rough",
+      "file": "sand_01-roughness.jpg",
+      "size": 189667,
+      "md5": "663d0ddf782a427b7da4e247c939e73b",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/sand_01/sand_01_rough_1k.jpg"
+    },
+    {
+      "asset": "gravel_floor",
+      "kind": "Diffuse",
+      "file": "gravel_floor-color.jpg",
+      "size": 1327302,
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/gravel_floor/gravel_floor_diff_1k.jpg",
+      "md5": "4f055e1545dcf41f347600fbb01d9ac2"
+    },
+    {
+      "asset": "gravel_floor",
+      "kind": "nor_gl",
+      "file": "gravel_floor-normal.jpg",
+      "size": 1538430,
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/gravel_floor/gravel_floor_nor_gl_1k.jpg",
+      "md5": "2377939c71250cf32f8b842bc4f3fe82"
+    },
+    {
+      "asset": "gravel_floor",
+      "kind": "Rough",
+      "file": "gravel_floor-roughness.jpg",
+      "size": 697340,
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/gravel_floor/gravel_floor_rough_1k.jpg",
+      "md5": "06a97bcb5cfaaa17456282237f9446eb"
+    },
+    {
+      "asset": "wood_floor_deck",
+      "kind": "Diffuse",
+      "file": "wood_floor_deck-color.jpg",
+      "size": 925789,
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/wood_floor_deck/wood_floor_deck_diff_1k.jpg",
+      "md5": "186a695239216a4b9dc970a87d6dbb15"
+    },
+    {
+      "asset": "wood_floor_deck",
+      "kind": "nor_gl",
+      "file": "wood_floor_deck-normal.jpg",
+      "size": 665094,
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/wood_floor_deck/wood_floor_deck_nor_gl_1k.jpg",
+      "md5": "dddabd549ede92e370d5268b0d895179"
+    },
+    {
+      "asset": "wood_floor_deck",
+      "kind": "Rough",
+      "file": "wood_floor_deck-roughness.jpg",
+      "size": 658448,
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/wood_floor_deck/wood_floor_deck_rough_1k.jpg",
+      "md5": "ff891ac48e0a9db02a665d2ae9bba36a"
+    },
+    {
+      "asset": "stone_brick_wall_001",
+      "kind": "Diffuse",
+      "file": "stone_brick_wall_001-color.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/stone_brick_wall_001/stone_brick_wall_001_diff_1k.jpg",
+      "size": 259947,
+      "md5": "fe05d5a4be3e01e7d922e7e935d8dfd9"
+    },
+    {
+      "asset": "stone_brick_wall_001",
+      "kind": "nor_gl",
+      "file": "stone_brick_wall_001-normal.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/stone_brick_wall_001/stone_brick_wall_001_nor_gl_1k.jpg",
+      "size": 355904,
+      "md5": "a389d00861e02eef39967dde975a8af4"
+    },
+    {
+      "asset": "stone_brick_wall_001",
+      "kind": "Rough",
+      "file": "stone_brick_wall_001-roughness.jpg",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/stone_brick_wall_001/stone_brick_wall_001_rough_1k.jpg",
+      "size": 197026,
+      "md5": "dac1157e3105f9cd63df26d72873d538"
+    }
+  ]
+}

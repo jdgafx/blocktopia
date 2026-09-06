@@ -2,104 +2,302 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Blocktopia</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%231a2017'/%3E%3Cpath fill='%23e9b44c' d='M16 12h23c9 0 14 5 14 13 0 5-3 9-7 11 5 2 8 6 8 12 0 9-6 14-16 14H16V12zm12 10v10h9c3 0 5-2 5-5s-2-5-5-5h-9zm0 20v10h10c3 0 5-2 5-5s-2-5-5-5H28z'/%3E%3C/svg%3E" />
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { background: #000; overflow: hidden; font-family: 'Segoe UI', sans-serif; }
+    [hidden] { display: none !important; }
+    body { background: #10120e; overflow: hidden; color: #f8f5e8; font-family: system-ui, sans-serif; }
+    button, input, select { font: inherit; }
+    button:focus-visible, input:focus-visible { outline: 3px solid #e9b44c; outline-offset: 3px; }
     #canvas { display: block; width: 100vw; height: 100vh; }
-    #hud {
-      position: fixed; inset: 0; pointer-events: none;
-      display: flex; flex-direction: column;
-      justify-content: space-between; align-items: center;
+    #room-gate {
+      position: fixed; inset: 0; z-index: 100; display: grid; place-items: safe center;
+      padding: 24px; overflow-y: auto; background: rgba(12, 15, 10, 0.88); pointer-events: all;
     }
-    #crosshair {
-      position: fixed; top: 50%; left: 50%;
-      transform: translate(-50%, -50%);
-      width: 20px; height: 20px; pointer-events: none;
+    .lobby-card {
+      width: min(100%, 420px); padding: 36px; border: 1px solid #4f5945;
+      border-radius: 10px; background: #1a2017; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
     }
-    #crosshair::before, #crosshair::after {
-      content: ''; position: absolute; background: rgba(255,255,255,0.8);
+    .eyebrow { color: #e9b44c; font-size: 0.75rem; font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase; }
+    h1 { margin-top: 8px; font-size: clamp(2.2rem, 9vw, 3.8rem); line-height: 0.95; letter-spacing: -0.04em; }
+    .lede { margin-top: 14px; color: #b9c1b2; line-height: 1.5; }
+    .room-actions { display: grid; gap: 12px; margin-top: 28px; }
+    button {
+      min-height: 48px; padding: 0 18px; border: 1px solid #d59633; border-radius: 6px;
+      background: #e9b44c; color: #1b160d; font-weight: 800; cursor: pointer;
     }
-    #crosshair::before { width: 2px; height: 20px; left: 9px; top: 0; }
-    #crosshair::after  { width: 20px; height: 2px; top: 9px; left: 0; }
-    #hotbar {
-      position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%);
-      display: flex; gap: 4px; pointer-events: none;
+    button:hover { background: #f4c76b; }
+    button:disabled { cursor: not-allowed; opacity: 0.45; }
+    #join-form { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+    label { font-size: 0.82rem; color: #d7dccf; }
+    input, select {
+      width: 100%; min-height: 48px; margin-top: 6px; padding: 0 13px; border: 1px solid #68715f;
+      border-radius: 6px; background: #0f130d; color: #fff;
     }
+    #room-code { text-transform: uppercase; letter-spacing: 0.12em; }
+    #account-panel { width: min(100%, 420px); }
+    .account-links { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+    .account-links button { background: transparent; color: #f8f5e8; border-color: #68715f; }
+    #account-status { margin-top: 16px; min-height: 24px; line-height: 1.5; }
+    #account-status[data-state="error"] { color: #ffb4a7; }
+    #account-panel:empty { display: none; }
+    #account-panel input { letter-spacing: normal; text-transform: none; }
+    .secondary { background: transparent; color: #f8f5e8; border-color: #68715f; }
+    .secondary:hover { background: #35422d; }
+    #account-name { overflow-wrap: anywhere; }
+    #game-menu { position: fixed; top: 82px; right: 12px; pointer-events: auto; min-height: 44px; z-index: 30; }
+    #game-controls { position: fixed; top: 226px; right: 12px; pointer-events: auto; z-index: 30; min-height: 44px; background: #182820; color: white; }
+    #controls-overlay { position: fixed; left: 12px; bottom: 126px; width: min(340px, calc(100vw - 24px)); max-height: 48vh; overflow: auto; padding: 16px; background: #14231ef5; border: 1px solid #839c87; border-radius: 8px; z-index: 35; pointer-events: auto; }
+    #controls-overlay header { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; }
+    #hide-controls { min-height: 36px; padding: 0 12px; }
+    .control-directions { display: grid; gap: 7px; line-height: 1.5; font-size: 14px; color: #f4f2e9; text-align: left; }
+    .control-directions strong { color: #ffe2a4; }
+    .control-directions label { margin-top: 6px; }
+    #front-controls { max-width: 410px; background: #132820e8; border: 1px solid #91a78b; border-radius: 6px; padding: 12px 16px; }
+    #front-controls summary { font-weight: bold; margin-bottom: 8px; }
+    #input-shortcuts { position: fixed; bottom: 8px; left: 12px; padding: 6px 9px; background: #14231edb; color: #fff3cf; font-size: 12px; pointer-events: none; }
+    @media (max-width: 600px) { #input-shortcuts { bottom: 62px; left: 50%; transform: translateX(-50%); white-space: nowrap; } }
+    #invite-url { font-size: 0.85rem; }
+    #menu-status { min-height: 24px; margin-top: 10px; color: #e9b44c; }
+    details { margin-top: 18px; color: #b9c1b2; font-size: 0.9rem; line-height: 1.7; }
+    summary { cursor: pointer; color: #f8f5e8; }
+    #join-room { align-self: end; }
+    #lobby-status { min-height: 22px; margin-top: 18px; color: #bdc6b6; font-size: 0.9rem; line-height: 1.45; }
+    #lobby-status[data-state="not-found"], #lobby-status[data-state="full"],
+    #lobby-status[data-state="config-missing"], #lobby-status[data-state="connection-error"] { color: #ffb4a7; }
+    #play-gate { text-align: center; }
+    #click-to-play { width: min(320px, 80vw); margin-top: 24px; font-size: 1.1rem; }
+    #play-gate p:last-child { margin-top: 14px; color: #b9c1b2; }
+    #hud { position: fixed; inset: 0; pointer-events: none; }
+    #crosshair { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 20px; height: 20px; }
+    #crosshair::before, #crosshair::after { content: ''; position: absolute; background: rgba(255, 255, 255, 0.8); }
+    #crosshair::before { width: 2px; height: 20px; left: 9px; }
+    #crosshair::after { width: 20px; height: 2px; top: 9px; }
+    #hotbar-frame {
+      position: fixed; bottom: 12px; left: 50%; width: max-content; max-width: calc(100vw - 16px);
+      padding: 36px 4px 4px; overflow-x: auto; overflow-y: hidden; transform: translateX(-50%);
+      pointer-events: auto; touch-action: pan-x; overscroll-behavior-x: contain; scrollbar-width: thin;
+    }
+    #hotbar { display: flex; width: max-content; gap: 4px; }
     .hotbar-slot {
-      width: 44px; height: 44px; border: 2px solid #888;
-      border-radius: 4px; background: rgba(0,0,0,0.5);
+      position: relative; flex: 0 0 44px; width: 44px; height: 44px; min-height: 44px; padding: 0; border: 2px solid #737e85;
+      border-radius: 4px; background-image: url('/textures/natural-atlas.png'); background-size: 400% 400%;
+      background-position: var(--tile-x) var(--tile-y); background-repeat: no-repeat; image-rendering: pixelated;
+      box-shadow: inset 0 0 0 1px rgba(7, 16, 20, 0.45);
     }
-    .hotbar-slot.active { border-color: #fff; }
-    #block-name {
-      position: fixed; bottom: 64px; left: 50%; transform: translateX(-50%);
-      color: #fff; font-size: 13px; text-shadow: 1px 1px 2px #000;
-      pointer-events: none;
+    .hotbar-slot.active { border-color: #fff; box-shadow: 0 0 0 2px #132b35, inset 0 0 0 1px rgba(7, 16, 20, 0.45); }
+    .hotbar-slot::after {
+      content: attr(data-label); position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%);
+      padding: 5px 8px; border-radius: 4px; background: rgba(10, 12, 9, 0.94); color: #fff; font-size: 12px;
+      line-height: 1; white-space: nowrap; opacity: 0; visibility: hidden; transition: opacity 120ms ease;
     }
-    #info {
-      position: fixed; top: 8px; left: 8px; color: #fff;
-      font-size: 12px; text-shadow: 1px 1px 2px #000; pointer-events: none;
+    .hotbar-slot:first-child::after { left: 0; transform: none; }
+    .hotbar-slot:last-child::after { right: 0; left: auto; transform: none; }
+    .hotbar-slot:hover::after, .hotbar-slot:focus-visible::after { opacity: 1; visibility: visible; }
+    .hotbar-slot:focus-visible { outline: 3px solid #e9b44c; outline-offset: 2px; }
+    #block-name { position: fixed; bottom: 102px; left: 50%; transform: translateX(-50%); font-size: 13px; text-shadow: 1px 1px 2px #000; }
+    #info, #network-status {
+      position: fixed; top: 8px; padding: 7px 9px; border-radius: 4px; background: rgba(0, 0, 0, 0.55);
+      font-size: 12px; text-shadow: 1px 1px 2px #000;
     }
-    #click-to-play {
-      position: fixed; inset: 0; background: rgba(0,0,0,0.7);
-      display: flex; flex-direction: column; align-items: center; justify-content: center;
-      color: #fff; pointer-events: all; cursor: pointer; z-index: 100;
-    }
-    #click-to-play h1 { font-size: 3rem; margin-bottom: 1rem; letter-spacing: 2px; }
-    #click-to-play p  { font-size: 1.1rem; color: #aaa; }
-    #touch-controls {
-      display: none;
-      position: fixed; inset: 0; pointer-events: none; z-index: 10;
-    }
+    #info { left: 8px; }
+    #network-status { right: 8px; }
+    #touch-controls { display: none; position: fixed; inset: 0; pointer-events: none; z-index: 10; }
     #joystick-zone {
-      position: fixed; bottom: 80px; left: 20px;
-      width: 120px; height: 120px;
-      border-radius: 50%; background: rgba(255,255,255,0.1);
-      border: 2px solid rgba(255,255,255,0.2);
-      pointer-events: all; touch-action: none;
+      position: fixed; bottom: 80px; left: 20px; width: 120px; height: 120px; border-radius: 50%;
+      background: rgba(255, 255, 255, 0.1); border: 2px solid rgba(255, 255, 255, 0.2); pointer-events: all; touch-action: none;
     }
     #joystick-knob {
-      position: absolute; width: 48px; height: 48px;
-      border-radius: 50%; background: rgba(255,255,255,0.4);
-      top: 50%; left: 50%; transform: translate(-50%,-50%);
-      pointer-events: none;
+      position: absolute; width: 48px; height: 48px; top: 50%; left: 50%; border-radius: 50%;
+      background: rgba(255, 255, 255, 0.4); transform: translate(-50%, -50%); pointer-events: none;
     }
     .touch-btn {
-      position: fixed; width: 56px; height: 56px;
-      border-radius: 50%; background: rgba(255,255,255,0.15);
-      border: 2px solid rgba(255,255,255,0.3);
-      display: flex; align-items: center; justify-content: center;
-      color: #fff; font-size: 20px; pointer-events: all; touch-action: none;
-      user-select: none;
+      position: fixed; width: 56px; height: 56px; display: grid; place-items: center; border-radius: 50%;
+      background: rgba(0, 0, 0, 0.45); border: 2px solid rgba(255, 255, 255, 0.45); color: #fff;
+      font-size: 14px; font-weight: 800; pointer-events: all; touch-action: none; user-select: none;
     }
-    #btn-jump  { bottom: 100px; right: 90px; }
+    #btn-jump { bottom: 100px; right: 90px; }
     #btn-break { bottom: 170px; right: 20px; }
     #btn-place { bottom: 100px; right: 20px; }
+    @media (max-width: 640px) {
+      .lobby-card { padding: 26px 22px; }
+      #network-status { top: 44px; left: 8px; right: auto; }
+      #hotbar-frame { bottom: 8px; }
+    }
+    #input-hint { position: fixed; z-index: 60; left: 50%; top: 72px; bottom: auto; transform: translateX(-50%); max-width: min(340px, calc(100vw - 24px)); background: #17251ee6; padding: 8px; font-size: .8rem; }
+    #input-hint:empty { display: none; }
+    #break-progress { position: fixed; left: 50%; top: calc(50% + 20px); transform: translateX(-50%); width: 76px; height: 5px; accent-color: #e9b44c; }
+    #camp-panel, #save-panel { text-align: left; }
+    #camp-supplies { display: flex; flex-wrap: wrap; gap: 6px; margin: 14px 0; }
+    .camp-material { font-size: .78rem; border: 1px solid #4f5945; border-radius: 4px; padding: 4px 7px; }
+    #camp-recipes { display: grid; gap: 8px; }
+    .recipe { display: grid; text-align: left; padding: 10px 12px; gap: 4px; }
+    .recipe small { font-weight: 400; font-size: .75rem; }
+    .quantity { position: absolute; right: 2px; bottom: 0; padding: 1px 3px; color: white; font-size: 13px; text-shadow: 1px 1px 2px black; background: #10180ddd; border-radius: 2px; }
+    #open-camp { position: fixed; right: 12px; top: 130px; min-height: 40px; pointer-events: auto; }
+    #camp-goal, #camp-feedback, #save-indicator { position: fixed; left: 12px; padding: 5px 8px; background: #10180dc9; border-radius: 4px; font-size: 12px; }
+    #camp-goal { top: 82px; max-width: calc(100vw - 120px); }
+    #camp-feedback { top: 115px; max-width: calc(100vw - 120px); color: #ffce94; }
+    #camp-feedback:empty { display: none; }
+    #save-indicator { bottom: 120px; max-width: calc(100vw - 24px); color: #c8d3bd; }
+    #save-status { margin: 10px 0; font-size: .85rem; }
+    #save-status[data-state="error"] { color: #ffb4a7; }
+    #save-panel button { margin-top: 10px; }
+    #saved-worlds { display: grid; gap: 12px; margin-top: 12px; }
+    .saved-world { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 4px 12px; border-top: 1px solid #4f5945; padding-top: 12px; }
+    .saved-world strong { overflow-wrap: anywhere; }
+    .saved-world small { grid-column: 1; font-size: .75rem; }
+    .saved-world button { grid-column: 2; grid-row: 1 / 3; padding: 0 10px; }
+    #library-status { font-size: .8rem; margin: 10px 0; }
+    @media(max-width:640px) { #save-indicator { bottom: auto; top: 178px; max-width: 170px; } }
+    #open-journal { position: fixed; top: 178px; right: 12px; pointer-events: auto; min-height: 40px; }
+    #region-name { position: fixed; top: 42px; left: 12px; font-size: .8rem; text-shadow: 0 2px 3px #000; }
+    #story-objective { position: fixed; top: 112px; left: 12px; max-width: calc(100vw - 145px); font-size: .8rem; padding: 7px; background: #13251ce6; }
+    #talk-character { position: fixed; bottom: 150px; left: 50%; transform: translateX(-50%); pointer-events: auto; }
+    #adventure-dialog { margin: auto; width: min(650px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow-y: auto; padding: 28px; border: 1px solid #81927a; border-radius: 10px; background: #1a251d; color: #f8f5e8; }
+    #adventure-dialog::backdrop { background: #07140dd9; }
+    #adventure-dialog h2 { font-size: 1.8rem; margin: 12px 0; }
+    #adventure-text { line-height: 1.7; color: #dae1d1; }
+    #story-action { margin-top: 18px; width: 100%; }
+    #story-cost, #story-feedback { color: #efbf60; margin-top: 10px; }
+    #story-chapters { padding-left: 22px; line-height: 1.65; }
+    #story-chapters li { margin: 10px 0; }
+    #story-chapters [data-state="complete"] { color: #83d6ae; }
+    #story-chapters [data-state="current"] { color: #f2c56c; }
+    #region-map { width: 100%; height: 245px; margin-top: 12px; background: #293b32; border: 1px solid #71816b; border-radius: 6px; }
+    #region-map circle { fill: #e7bd66; } #region-map text { fill: #f8f5e8; font-size: 7.5px; text-anchor: middle; }
+    #region-map #map-player { fill: #fff; stroke: #42dbae; stroke-width: 1.3; }
+    #close-adventure { float: right; }
+    @media (max-width: 600px) { #adventure-dialog { padding: 18px; } #story-objective { top: 118px; font-size: .72rem; } #region-name { top: 82px; max-width: calc(100vw - 145px); } }
+    #game-menu, #open-camp, #btn-jump, #btn-break, #btn-place { background: #182820; color: #fff; border-color: #849782; }
+    #game-menu:hover, #open-camp:hover { background: #304737; }
+    #region-name, #block-name { background: #182820; padding: 4px 6px; border-radius: 4px; }
+    #block-name:empty { display: none; }
   </style>
 </head>
 <body>
   <canvas id="canvas"></canvas>
+  <main id="room-gate">
+    <aside id="welcome-copy" aria-label="About Blocktopia">
+      <p class="eyebrow">The Long Silence · A shared adventure</p>
+      <h2>Make your place<br>in the wild.</h2>
+      <p class="welcome-story">Follow the old roads. Restore the lights.<br>Build a home with your friends.</p>
+      <button id="welcome-cinematic" class="secondary" type="button" title="Watch the Hearthwood world cinematic">Watch Hearthwood cinematic <span aria-hidden="true">↗</span></button>
+      <p class="art-caption">Hearthwood · World artwork</p>
+      <details id="front-controls" open><summary title="Show or hide the controls before entering the world">Controls — start here</summary><div data-controls-copy></div></details>
+    </aside>
+    <div id="account-panel"></div>
+    <section id="room-lobby" hidden class="lobby-card" aria-labelledby="game-title">
+      <p class="eyebrow">A world to build together</p>
+      <h1 id="game-title">Blocktopia</h1>
+      <p class="lede">Meet the beacon keepers, explore four regions, and rebuild their connection. Start a new world, then invite up to seven friends.</p>
+      <p id="account-name" class="lede"></p>
+      <div class="room-actions">
+        <label for="world-name">Expedition name<input id="world-name" maxlength="48" placeholder="Name your camp" title="Choose a name for your saved expedition" /></label>
+        <label for="world-mode">How will you build?<select id="world-mode" title="Expedition gathers supplies; Creative has unlimited blocks"><option value="expedition">Expedition · gather and craft</option><option value="creative">Creative · unlimited building</option></select></label>
+        <button id="create-room" title="Start a new shared world" type="button">Start a world</button>
+        <form id="join-form">
+          <label for="room-code">Room code
+            <input id="room-code" title="Enter the six-character code shared by your friend" name="room-code" inputmode="text" autocomplete="off" maxlength="7" placeholder="ABC234" />
+          </label>
+          <button id="join-room" title="Enter the world with this room code" type="submit">Join</button>
+        </form>
+      </div>
+      <details id="saved-panel"><summary title="Continue one of your saved expeditions">Your expeditions</summary>
+        <div id="saved-worlds"></div><p id="library-status" role="status"></p>
+        <button id="refresh-saves" type="button" class="secondary" title="Refresh saved expeditions">Refresh saves</button>
+      </details>
+      <button id="sign-out" title="Sign out of your Blocktopia account" class="secondary" type="button" style="margin-top:18px">Sign out</button>
+      <p id="lobby-status" role="status" aria-live="polite">Choose how to enter.</p>
+    </section>
+    <section id="play-gate" class="lobby-card" hidden>
+      <h1 id="play-title">Room joined</h1>
+      <p class="lede" id="play-description">Enter your expedition when the world is ready. Friends can join using the link below.</p>
+      <button id="click-to-play" title="Capture the mouse and start playing; Escape opens this menu" type="button"><span id="play-instruction">Click to play</span></button>
+      <div class="room-actions">
+        <label for="invite-url">Invite friends<input id="invite-url" title="Share this address with friends to invite them" readonly /></label>
+        <button id="copy-invite" title="Copy a link friends can use to join this world" class="secondary" type="button">Copy invite link</button>
+        <button id="leave-room" title="Save your expedition and return to the lobby" class="secondary" type="button">Save & leave</button>
+      </div>
+      <details id="graphics-panel"><summary title="Adjust lighting, brightness and viewing distance">Graphics</summary><label for="graphics-quality">View distance and shadows<select id="graphics-quality" title="Higher quality extends viewing distance and sharpens shadows"><option value="balanced">Balanced · nearby detail</option><option value="high">High · wider horizons</option></select></label>
+        <label for="scene-lighting">World lighting<select id="scene-lighting" title="Keep bright daylight or follow the day and night cycle"><option value="daylight">Bright daylight</option><option value="cycle">Day / night cycle</option></select></label>
+        <label for="scene-brightness">Brightness <output id="scene-brightness-value" for="scene-brightness">125%</output><input id="scene-brightness" title="Adjust scene brightness from 80 to 175 percent" type="range" min="80" max="175" step="5" value="125" /></label>
+      </details>
+      <details id="camp-panel"><summary title="View shared supplies and craft building materials">Camp supplies & crafting</summary>
+        <p id="camp-description" class="lede"></p><div id="camp-supplies"></div><div id="camp-recipes"></div>
+      </details>
+      <details id="save-panel"><summary title="Name and save your expedition">Save expedition</summary>
+        <label for="save-name">Expedition name<input id="save-name" maxlength="48" title="Rename this saved expedition" /></label>
+        <button id="save-world" type="button" class="secondary" title="Save terrain and camp supplies to your account">Save now</button>
+        <button id="save-copy" type="button" class="secondary" title="Keep this session as a separate saved expedition" hidden>Save a separate copy</button>
+        <p id="save-status" role="status"></p>
+      </details>
+      <p id="menu-status" role="status"></p>
+      <details open><summary title="Show or hide keyboard, mouse and touch directions">Controls &amp; mouse mode</summary><div data-controls-copy></div></details>
+      <p class="lede">Your expedition autosaves to your account. Continue it later in a fresh room; invite friends with the new link.</p>
+    </section>
+  </main>
 
-  <div id="click-to-play">
-    <h1>BLOCKTOPIA</h1>
-    <p>Click to play</p>
-  </div>
-
-  <div id="hud">
-    <div id="info">WASD move · Space jump · Left click break · Right click place</div>
+  <dialog id="adventure-dialog" aria-labelledby="adventure-title">
+    <button id="close-adventure" type="button" class="secondary">Close</button>
+    <p class="eyebrow">The Long Silence</p><h2 id="adventure-title"></h2>
+    <figure id="character-art" hidden><img id="character-image" alt="" width="2048" height="1152" /><figcaption>Character artwork</figcaption></figure>
+    <p id="adventure-text"></p>
+    <button id="story-action" type="button" hidden></button><p id="story-cost"></p><p id="story-feedback" role="status"></p>
+    <details open><summary>Expedition journal &amp; map</summary>
+      <section id="region-preview" aria-label="Region artwork and cinematics">
+        <div id="region-choices" aria-label="Choose a region"></div>
+        <figure><img id="region-art" alt="" width="2048" height="1152" /><figcaption><span id="region-art-name"></span> · World artwork</figcaption></figure>
+        <p id="region-description"></p>
+        <button id="region-cinematic" type="button" class="secondary" title="Watch this region’s cinematic">Watch cinematic</button>
+      </section>
+      <svg id="region-map" viewBox="-24 -12 160 140" role="img" aria-label="Four settlements connected by roads. White marker shows your position."><path d="M8 8 H104 V104 H8 Z" fill="none" stroke="#708467" stroke-width="2" stroke-dasharray="3 2"/></svg>
+      <ol id="story-chapters"></ol>
+    </details>
+  </dialog>
+  <dialog id="cinematic-dialog" aria-labelledby="cinematic-title" aria-describedby="cinematic-description">
+    <header><div><p class="eyebrow">Cinematic</p><h2 id="cinematic-title"></h2></div><button id="close-cinematic" class="secondary" type="button" title="Close cinematic and stop playback">Close</button></header>
+    <video id="cinematic-video" controls playsinline preload="none"></video>
+    <p id="cinematic-description">An imagined glimpse of the region. World artwork brought to life.</p>
+    <p id="cinematic-status" role="status"></p>
+  </dialog>
+  <div id="hud" hidden>
+    <span id="region-name"></span><span id="story-objective"></span>
+    <button id="open-journal" type="button" title="Open your story journal and world map">Journal [J]</button>
+    <button id="talk-character" type="button" hidden></button>
+    <button id="game-menu" type="button" class="secondary" title="Open the world menu. Escape or M also opens it.">Menu · Esc</button>
+    <button id="game-controls" type="button" title="Show or hide control directions. Keyboard shortcut: H." aria-controls="controls-overlay" aria-expanded="false">Controls · H</button>
+    <aside id="controls-overlay" aria-label="Game control directions" hidden><header><strong>Controls</strong><button id="hide-controls" class="secondary" type="button" title="Hide directions. Press H to show them again.">Hide · H</button></header><div data-controls-copy></div></aside>
+    <p id="input-shortcuts">Esc / M: menu · H: controls</p>
+    <button id="open-camp" type="button" class="secondary" title="Open shared supplies and crafting (E)">Camp [E]</button>
+    <div id="camp-goal"></div><div id="camp-feedback" role="status"></div><div id="save-indicator" role="status"></div>
+    <div id="info">WASD move | Space jump | Left click break | Right click place</div>
+    <div id="network-status" role="status">Connecting</div>
+    <p id="input-hint" role="status"></p>
+    <progress id="break-progress" max="1" value="0" aria-label="Block breaking progress" hidden></progress>
     <div id="crosshair"></div>
-    <div>
-      <div id="block-name"></div>
-      <div id="hotbar"></div>
-    </div>
+    <div id="block-name"></div>
+    <div id="hotbar-frame"><div id="hotbar"></div></div>
   </div>
 
+  <template id="controls-directions"><div class="control-directions">
+    <p><strong>Move:</strong> WASD or arrow keys · <strong>Jump:</strong> Space</p>
+    <p><strong>Look:</strong> hold the right mouse button and drag in Cursor mode. In Captured mode, move the mouse.</p>
+    <p><strong>Aim:</strong> use the centre crosshair. Hold left click to chop or break; right click without dragging to place.</p>
+    <p><strong>Choose block:</strong> 1–9, mouse wheel, or click the hotbar.</p>
+    <p><strong>Menu:</strong> Esc or M · <strong>Directions:</strong> H to show/hide</p>
+    <p><strong>Camp:</strong> E · <strong>Journal:</strong> J · <strong>Talk:</strong> F nearby</p>
+    <p><strong>Touch:</strong> left stick to move, swipe the world to look, and use the Jump / Break / Place buttons.</p>
+    <label>Mouse mode<select data-mouse-mode title="Cursor mode keeps screen buttons clickable. Captured mode uses Escape to reach menus."><option value="cursor">Cursor — right-drag to look</option><option value="capture">Captured — mouse looks freely</option></select></label>
+    <p>Captured mode hides your cursor. Press <strong>Esc</strong> to reach the menu.</p>
+  </div></template>
   <div id="touch-controls">
-    <div id="joystick-zone"><div id="joystick-knob"></div></div>
-    <div class="touch-btn" id="btn-jump">↑</div>
-    <div class="touch-btn" id="btn-break">⛏</div>
-    <div class="touch-btn" id="btn-place">🧱</div>
+    <div id="joystick-zone" aria-label="Move"><div id="joystick-knob"></div></div>
+    <button type="button" class="touch-btn" id="btn-jump" title="Jump" aria-label="Jump">Jump</button>
+    <button type="button" class="touch-btn" id="btn-break" title="Break block" aria-label="Break block">Break</button>
+    <button type="button" class="touch-btn" id="btn-place" title="Place block" aria-label="Place block">Place</button>
   </div>
 
   <script type="module" src="/src/main.js"></script>

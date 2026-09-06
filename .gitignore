@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.env*
+!.env.example
+output/
+
+# Local Netlify folder
+.netlify
+
+.omc/
+.claude-flow/
+.playwright-cli/
+.acceptance/
+graphify-out/

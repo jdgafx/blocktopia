@@ -1,4 +1,5 @@
 import { BLOCK_DEFS, BLOCKS } from '../constants/blocks.js';
+import { raycastBuilding } from './buildings.js';
 
 /**
  * DDA voxel raycast. Returns { x, y, z, face } of first solid block hit,
@@ -34,8 +35,11 @@ export function raycast(world, origin, direction, maxDist = 5) {
   while (t < maxDist) {
     const id = world.getBlock(bx, by, bz);
     const def = BLOCK_DEFS[id];
-    if (id !== BLOCKS.AIR && def && def.solid) {
-      return { x: bx, y: by, z: bz, face };
+    if (id !== BLOCKS.AIR && def && def.solid && !world.isNaturalLeaf?.(bx, by, bz)) {
+      const parts = world.getBuildingParts?.(bx, by, bz);
+      if (!parts) return { x: bx, y: by, z: bz, face };
+      const hit = raycastBuilding(parts, origin, direction, t, Math.min(maxDist, tMaxX, tMaxY, tMaxZ));
+      if (hit) return { x: bx, y: by, z: bz, face: hit.face };
     }
 
     if (tMaxX < tMaxY && tMaxX < tMaxZ) {

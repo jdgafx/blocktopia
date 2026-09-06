@@ -16,23 +16,23 @@ export const BLOCKS = Object.freeze({
   WATER: 14,
 });
 
-// UV tile coords [col, row] in the 16×16 atlas grid
+// UV tile coordinates [column, row] in the 4x4 Electric Jurassic atlas.
 export const BLOCK_DEFS = {
   [BLOCKS.AIR]:        { name: 'Air',         solid: false, transparent: true,  top:[0,0], side:[0,0], bot:[0,0] },
   [BLOCKS.GRASS]:      { name: 'Grass',        solid: true,  transparent: false, top:[0,0], side:[1,0], bot:[2,0] },
   [BLOCKS.DIRT]:       { name: 'Dirt',         solid: true,  transparent: false, top:[2,0], side:[2,0], bot:[2,0] },
   [BLOCKS.STONE]:      { name: 'Stone',        solid: true,  transparent: false, top:[3,0], side:[3,0], bot:[3,0] },
-  [BLOCKS.WOOD_LOG]:   { name: 'Wood Log',     solid: true,  transparent: false, top:[4,0], side:[5,0], bot:[4,0] },
-  [BLOCKS.LEAVES]:     { name: 'Leaves',       solid: true,  transparent: false, top:[6,0], side:[6,0], bot:[6,0] },
-  [BLOCKS.SAND]:       { name: 'Sand',         solid: true,  transparent: false, top:[7,0], side:[7,0], bot:[7,0] },
-  [BLOCKS.GRAVEL]:     { name: 'Gravel',       solid: true,  transparent: false, top:[8,0], side:[8,0], bot:[8,0] },
-  [BLOCKS.PLANKS]:     { name: 'Planks',       solid: true,  transparent: false, top:[9,0], side:[9,0], bot:[9,0] },
-  [BLOCKS.STONE_BRICK]:{ name: 'Stone Brick',  solid: true,  transparent: false, top:[10,0],side:[10,0],bot:[10,0]},
-  [BLOCKS.GLASS]:      { name: 'Glass',        solid: true,  transparent: true,  top:[11,0],side:[11,0],bot:[11,0]},
-  [BLOCKS.COAL_ORE]:   { name: 'Coal Ore',     solid: true,  transparent: false, top:[12,0],side:[12,0],bot:[12,0]},
-  [BLOCKS.IRON_ORE]:   { name: 'Iron Ore',     solid: true,  transparent: false, top:[13,0],side:[13,0],bot:[13,0]},
-  [BLOCKS.BEDROCK]:    { name: 'Bedrock',      solid: true,  transparent: false, top:[14,0],side:[14,0],bot:[14,0]},
-  [BLOCKS.WATER]:      { name: 'Water',        solid: false, transparent: true,  top:[15,0],side:[15,0],bot:[15,0]},
+  [BLOCKS.WOOD_LOG]:   { name: 'Wood Log',     solid: true,  transparent: false, top:[0,1], side:[1,1], bot:[0,1] },
+  [BLOCKS.LEAVES]:     { name: 'Leaves',       solid: true,  transparent: false, top:[2,1], side:[2,1], bot:[2,1] },
+  [BLOCKS.SAND]:       { name: 'Sand',         solid: true,  transparent: false, top:[3,1], side:[3,1], bot:[3,1] },
+  [BLOCKS.GRAVEL]:     { name: 'Gravel',       solid: true,  transparent: false, top:[0,2], side:[0,2], bot:[0,2] },
+  [BLOCKS.PLANKS]:     { name: 'Planks',       solid: true,  transparent: false, top:[1,2], side:[1,2], bot:[1,2] },
+  [BLOCKS.STONE_BRICK]:{ name: 'Stone Brick',  solid: true,  transparent: false, top:[2,2], side:[2,2], bot:[2,2] },
+  [BLOCKS.GLASS]:      { name: 'Glass',        solid: true,  transparent: true,  top:[3,2], side:[3,2], bot:[3,2] },
+  [BLOCKS.COAL_ORE]:   { name: 'Coal Ore',     solid: true,  transparent: false, top:[0,3], side:[0,3], bot:[0,3] },
+  [BLOCKS.IRON_ORE]:   { name: 'Iron Ore',     solid: true,  transparent: false, top:[1,3], side:[1,3], bot:[1,3] },
+  [BLOCKS.BEDROCK]:    { name: 'Bedrock',      solid: true,  transparent: false, top:[2,3], side:[2,3], bot:[2,3] },
+  [BLOCKS.WATER]:      { name: 'Water',        solid: false, transparent: true,  top:[3,3], side:[3,3], bot:[3,3] },
 };
 
 export const HOTBAR_BLOCKS = [

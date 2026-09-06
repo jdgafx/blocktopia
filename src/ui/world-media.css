@@ -1,0 +1,64 @@
+#room-gate:not(.in-world) {
+  background: #183932 url('/media/forest-haven.webp') center / cover no-repeat;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
+  align-items: center; gap: 6vw; padding: 42px clamp(24px, 5vw, 90px);
+}
+#room-gate:not(.in-world)::before { content: ''; position: fixed; inset: 0; background: #10231d30; pointer-events: none; }
+#account-panel, #room-lobby { grid-column: 2; grid-row: 1; position: relative; }
+#room-gate:not(.in-world) .lobby-card { background: #162d2af5; border-color: #92ad9680; border-radius: 8px; padding: 30px; }
+#room-gate:not(.in-world) h1 { font-size: clamp(2.4rem, 4vw, 3.2rem); }
+#room-gate:not(.in-world) .room-actions { margin-top: 22px; }
+#welcome-copy { grid-column: 1; grid-row: 1; position: relative; align-self: end; padding: 24px 0 14px; color: #fff9e5; text-shadow: 0 2px 8px #071b13, 0 0 40px #071b13; }
+#welcome-copy .eyebrow { color: #ffe3a5; margin-bottom: 18px; }
+#welcome-copy h2 { font-family: Georgia, 'Times New Roman', serif; font-weight: 400; font-size: clamp(3.4rem, 6.3vw, 6.8rem); line-height: .98; letter-spacing: -.045em; }
+#welcome-copy .welcome-story { font-size: 1.08rem; line-height: 1.65; margin: 24px 0; }
+#welcome-cinematic { background: #162d2aeb; border-color: #c8d4b6; color: #fff9e5; }
+#welcome-cinematic span { margin-left: 20px; }
+.art-caption { margin-top: 18px; font-size: .72rem; letter-spacing: .08em; color: #e5ecdb; }
+.in-world #welcome-copy { display: none; }
+#play-gate h1 { font-size: clamp(2rem, 5vw, 2.8rem); }
+button:focus-visible, select:focus-visible, summary:focus-visible, video:focus-visible { outline: 3px solid #e9b44c; outline-offset: 3px; }
+#adventure-dialog { width: min(780px, calc(100vw - 24px)); }
+#adventure-dialog h2 { font-family: Georgia, 'Times New Roman', serif; font-size: 2rem; font-weight: 400; }
+#adventure-text { min-height: 0; }
+#character-art { float: right; width: 140px; margin: 0 0 12px 20px; }
+#character-image { display: block; width: 100%; height: 145px; object-fit: cover; }
+#character-art figcaption { font-size: .65rem; margin-top: 4px; color: #b9cbbc; }
+#adventure-dialog > details { clear: both; }
+#region-preview { margin-top: 18px; }
+#region-choices { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-bottom: 10px; }
+#region-choices button { min-height: 42px; font-size: .78rem; padding: 5px; background: transparent; color: #cedbc9; border-color: #657965; }
+#region-choices button[aria-pressed="true"] { color: #19291e; background: #e3bd77; border-color: #e3bd77; }
+#region-preview figure { position: relative; }
+#region-art { display: block; width: 100%; height: auto; max-height: 300px; object-fit: cover; border-radius: 4px; }
+#region-preview figcaption { position: absolute; bottom: 10px; left: 10px; padding: 3px 8px; background: #14281fec; border-radius: 3px; color: #eef3e4; font-size: .7rem; }
+#region-description { color: #d6dfd0; margin: 12px 0 10px; }
+#region-cinematic { min-height: 42px; font-size: .85rem; }
+#cinematic-dialog { margin: auto; width: min(1050px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow-y: auto; padding: 20px; border: 1px solid #a6b49b; border-radius: 8px; background: #152a24; color: #f6f0dc; }
+#cinematic-dialog::backdrop { background: #071710eb; }
+#cinematic-dialog header { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-bottom: 16px; }
+#cinematic-title { margin-top: 5px; font-family: Georgia, 'Times New Roman', serif; font-weight: 400; font-size: 1.8rem; }
+#cinematic-video { display: block; width: 100%; aspect-ratio: 16 / 9; max-height: 70dvh; background: #07120c; }
+#cinematic-description, #cinematic-status { font-size: .8rem; color: #bfcebe; line-height: 1.5; margin-top: 10px; }
+#cinematic-status:empty { display: none; }
+@media (max-width: 900px) {
+  #room-gate:not(.in-world) { grid-template-columns: minmax(0, 460px); justify-content: center; align-content: start; gap: 24px; padding: 24px; }
+  #welcome-copy { grid-column: 1; grid-row: 1; padding: 10px 0 0; }
+  #welcome-copy h2 { font-size: clamp(2.8rem, 8vw, 4rem); }
+  #welcome-copy .welcome-story { display: none; }
+  #welcome-copy .eyebrow { font-size: .63rem; margin-bottom: 12px; }
+  #welcome-cinematic { margin-top: 18px; min-height: 42px; }
+  .art-caption { margin-top: 8px; }
+  #account-panel, #room-lobby { grid-column: 1; grid-row: 2; width: 100%; }
+  #room-gate:not(.in-world) .lobby-card { width: 100%; padding: 24px; }
+}
+@media (max-width: 480px) {
+  #room-gate:not(.in-world) { padding: 20px 16px; gap: 18px; }
+  #welcome-copy h2 { font-size: 2.7rem; }
+  #region-choices { grid-template-columns: repeat(2, 1fr); }
+  #character-art { width: 100px; margin-left: 12px; }
+  #character-image { height: 115px; }
+  #cinematic-dialog { padding: 12px; }
+  #cinematic-title { font-size: 1.4rem; }
+}
+@media (prefers-reduced-motion: reduce) { .hotbar-slot::after { transition: none; } }

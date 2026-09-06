@@ -1,20 +1,23 @@
-import { HOTBAR_BLOCKS, BLOCK_DEFS } from '../constants/blocks.js';
+import { BLOCK_DEFS, HOTBAR_BLOCKS } from '../constants/blocks.js';
 
-export function initHUD() {
+export function initHUD(player) {
   const hotbar = document.getElementById('hotbar');
   if (!hotbar) return;
 
   HOTBAR_BLOCKS.forEach((blockId, i) => {
-    const slot = document.createElement('div');
+    const slot = document.createElement('button');
     slot.className = 'hotbar-slot' + (i === 0 ? ' active' : '');
-    slot.title = BLOCK_DEFS[blockId]?.name ?? '';
-
-    const colors = [
-      '#5d9e32','#8b6040','#7a7a7a','#8c6b2c',
-      '#3a7a3a','#d4c86e','#b8874a','#888080','#c8e8f0',
-    ];
-    slot.style.background = colors[i] ?? '#555';
-    slot.style.border = '2px solid #888';
+    const name = BLOCK_DEFS[blockId]?.name ?? '';
+    slot.title = name;
+    slot.dataset.label = name;
+    slot.tabIndex = 0;
+    slot.type = 'button';
+    slot.setAttribute('aria-pressed', String(i === 0));
+    slot.addEventListener('click', () => player.selectBlock(i));
+    slot.setAttribute('aria-label', name);
+    const [column, row] = BLOCK_DEFS[blockId]?.top ?? [0, 0];
+    slot.style.setProperty('--tile-x', `${column * 100 / 3}%`);
+    slot.style.setProperty('--tile-y', `${row * 100 / 3}%`);
     hotbar.appendChild(slot);
   });
 }
