@@ -283,13 +283,12 @@
   </div>
 
   <template id="controls-directions"><div class="control-directions">
-    <p><strong>Move:</strong> WASD or arrow keys · <strong>Jump:</strong> Space</p>
-    <p><strong>Look:</strong> hold the right mouse button and drag in Cursor mode. In Captured mode, move the mouse.</p>
-    <p><strong>Aim:</strong> use the centre crosshair. Hold left click to chop or break; right click without dragging to place.</p>
-    <p><strong>Choose block:</strong> 1–9, mouse wheel, or click the hotbar.</p>
-    <p><strong>Menu:</strong> Esc or M · <strong>Directions:</strong> H to show/hide</p>
-    <p><strong>Camp:</strong> E · <strong>Journal:</strong> J · <strong>Talk:</strong> F nearby</p>
-    <p><strong>Touch:</strong> left stick to move, swipe the world to look, and use the Jump / Break / Place buttons.</p>
+    <p><span class="direction-icon" aria-hidden="true">✥</span><span><strong>MOVE</strong><kbd>W A S D</kbd> or arrow keys<br><strong>JUMP</strong> <kbd>Space</kbd></span></p>
+    <p><span class="direction-icon" aria-hidden="true">↔</span><span><strong>LOOK AROUND</strong>Cursor mode: hold right mouse + drag.<br>Captured mode: move your mouse.</span></p>
+    <p><span class="direction-icon" aria-hidden="true">⊕</span><span><strong>BREAK & BUILD</strong>Aim with the centre crosshair.<br>Hold left click to break. Right click without dragging to place.</span></p>
+    <p><span class="direction-icon" aria-hidden="true">▦</span><span><strong>CHOOSE A BLOCK</strong><kbd>1–9</kbd>, mouse wheel, or tap a block below.</span></p>
+    <p><span class="direction-icon" aria-hidden="true">☰</span><span><strong>MENUS & HELP</strong><kbd>Esc / M</kbd> Menu · <kbd>H</kbd> Directions<br><kbd>E</kbd> Camp · <kbd>J</kbd> Journal<br><kbd>C</kbd> Wildlife · <kbd>F</kbd> Talk nearby</span></p>
+    <p><span class="direction-icon" aria-hidden="true">☝</span><span><strong>TOUCHSCREEN</strong>Left stick to move. Swipe to look.<br>Tap Jump, Break, or Place.</span></p>
     <label>Mouse mode<select data-mouse-mode title="Cursor mode keeps screen buttons clickable. Captured mode uses Escape to reach menus."><option value="cursor">Cursor — right-drag to look</option><option value="capture">Captured — mouse looks freely</option></select></label>
     <p>Captured mode hides your cursor. Press <strong>Esc</strong> to reach the menu.</p>
   </div></template>

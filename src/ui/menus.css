@@ -109,3 +109,76 @@ body #creature-panel[open] { display: flex; flex-direction: column; height: min(
   #play-gate .room-actions button { font-size: 12px; gap: 4px; padding: 6px; }
 }
 #play-gate #click-to-play { width: 100%; justify-content: center; gap: 12px; margin-top: 8px; }
+/* Readability pass: opaque panels, bright labels, and large controls. */
+:root { --menu-ink: #ffffff; --menu-panel: #091c19; --menu-cyan: #80f5ff; --menu-gold: #ffe176; --menu-lime: #b8ff8b; }
+#play-gate, #room-gate:not(.in-world) .lobby-card, body #creature-panel, #adventure-dialog, #controls-overlay, #front-controls { background: var(--menu-panel); color: var(--menu-ink); border: 2px solid #91c8ba; }
+#play-gate h1, #adventure-dialog h2, #creature-panel .pack-header h2 { color: var(--menu-gold); }
+#play-gate .lede, #play-gate > .lede:last-child, #play-gate label, #room-lobby .lede, #adventure-text, #region-description { color: #fff; font-size: 17px; line-height: 1.6; }
+#play-gate > details, #saved-panel, #front-controls { border-color: #93c7b6; background: #122e27; }
+#play-gate > details > summary, #saved-panel > summary, #front-controls > summary, #adventure-dialog > details > summary { font-size: 20px; color: var(--menu-cyan); gap: 12px; min-height: 90px; }
+#play-gate > details:nth-of-type(2) > summary { color: var(--menu-gold); }
+#play-gate > details:nth-of-type(3) > summary { color: var(--menu-lime); }
+#play-gate > details > summary .menu-icon { width: 64px; height: 64px; }
+#play-gate .room-actions button { font-size: 17px; }
+#play-gate #click-to-play { font-size: 23px; min-height: 64px; }
+#play-gate .control-directions, .control-directions { font-size: 18px; line-height: 1.55; color: white; gap: 12px; text-shadow: none; }
+.control-directions > p:has(.direction-icon) { display: flex; align-items: flex-start; gap: 12px; padding: 14px 12px; border: 1px solid #7aab9c; border-left: 5px solid var(--menu-cyan); border-radius: 6px; background: #102a25; }
+.control-directions > p:nth-child(3n+2) { border-left-color: var(--menu-gold); }
+.control-directions > p:nth-child(3n) { border-left-color: var(--menu-lime); }
+.control-directions strong { display: block; color: var(--menu-cyan); font-size: 19px; margin-bottom: 4px; letter-spacing: .03em; }
+.control-directions p:nth-child(3n+2) strong { color: var(--menu-gold); }
+.control-directions p:nth-child(3n) strong { color: var(--menu-lime); }
+.direction-icon { flex: 0 0 38px; font-size: 36px; line-height: 1.2; color: var(--menu-gold); text-align: center; }
+.control-directions kbd { display: inline-block; padding: 2px 7px; margin: 2px 0; background: #e6fff1; color: #09211b; border: 1px solid white; border-bottom: 3px solid #72bb9e; border-radius: 4px; font: 800 16px system-ui,sans-serif; }
+.control-directions label, .control-directions select { font-size: 18px; color: white; }
+#controls-overlay { width: min(470px,calc(100vw - 24px)); max-height: calc(100dvh - 140px); bottom: 100px; padding: 18px; box-shadow: 0 8px 36px #000b; }
+#controls-overlay header strong { color: var(--menu-gold); font-size: 26px; }
+#hide-controls { font-size: 17px; min-height: 48px; }
+#hud button.illustrated-control { min-height: 56px; font-size: 17px; gap: 8px; padding: 5px 10px; background: #09221a; color: var(--menu-gold); border: 2px solid #bbdfa2; box-shadow: 0 2px 8px #000b; }
+#hud button.illustrated-control .menu-icon { width: 40px; height: 40px; }
+#hud #game-menu { top: 82px; }
+#hud #open-camp { top: 144px; }
+#hud #open-journal { top: 206px; color: var(--menu-cyan); }
+#hud #game-controls { top: 268px; color: var(--menu-cyan); }
+#hud #open-creatures { top: 330px; color: var(--menu-lime); }
+#input-shortcuts { background: #071912; color: #fff58f; font-size: 16px; font-weight: 800; border: 1px solid #b2d692; }
+#creature-panel .pack-nav button { font-size: 17px; color: #fff; border-color: #719687; }
+#creature-panel .pack-nav .menu-icon { width: 68px; height: 68px; }
+#creature-panel .pack-nav button[aria-pressed=true] { color: #071c14; background: #c7ef91; border: 2px solid #edffd8; }
+#creature-panel h3 { font-size: 24px; color: var(--menu-cyan); }
+#creature-panel .pack-hint, .item-label small, .wildlife-identity p, #creature-description details, #creature-companions { color: #e5ffed; font-size: 16px; }
+.item-label strong { font-size: 19px; color: var(--menu-gold); }
+.item-picture { background: #335444; }
+.item-picture .menu-icon { width: 56px; height: 56px; }
+#creature-panel .pack-vitals label, .wildlife-stats label { font-size: 16px; color: #fff; font-weight: 700; }
+#creature-panel .pack-tools button, #creature-panel .item-actions button, #creature-panel #creature-actions button, #creature-panel #creature-close { font-size: 16px; }
+#creature-panel .pack-tools button, #creature-panel .item-actions button { background: #173e2d; color: #fff6b5; border-color: #b8d991; }
+.pack-tools small, .recipe small { font-size: 14px; color: #fff; }
+#creature-panel button:disabled, #play-gate button:disabled { opacity: 1; color: #b6c6bd; background: #25372f; border-color: #67766c; }
+#camp-supplies .camp-material { color: #fff; font-size: 16px; }
+#camp-supplies .camp-material strong { color: var(--menu-gold); font-size: 23px; }
+#camp-recipes .recipe strong { color: var(--menu-gold); font-size: 18px; }
+@media(max-width:700px) {
+  #creature-panel .pack-nav button { font-size: 13px; }
+  #creature-panel .pack-nav .menu-icon { width: 58px; height: 58px; }
+  #creature-panel .provision-row { grid-template-columns: 58px minmax(0,1fr); }
+  .item-picture { width: 58px; height: 58px; }
+}
+@media(max-width:540px) {
+  #play-gate > details > summary { flex-direction: column; align-items: flex-start; font-size: 17px; gap: 6px; }
+  #play-gate > details > summary::after { align-self: flex-end; margin-top: -25px; }
+  #play-gate .room-actions button { font-size: 15px; }
+  #play-gate .room-actions button .menu-icon { width: 32px; height: 32px; }
+  #hud button.illustrated-control { font-size: 15px; }
+  #hud button.illustrated-control .menu-icon { width: 34px; height: 34px; }
+  .control-directions > p:has(.direction-icon) { gap: 8px; padding: 12px 8px; }
+  .direction-icon { flex-basis: 30px; font-size: 30px; }
+  #creature-panel .pack-header h2 { font-size: 23px; }
+  #creature-panel .pack-header .eyebrow { font-size: 11px; }
+  #creature-panel .pack-header { flex-wrap: wrap; }
+  #creature-panel .pack-nav button { font-size: 12px; }
+  .item-label strong { font-size: 17px; }
+}
+#hud { z-index: 20; }
+#controls-overlay header { position: sticky; top: -18px; margin: -1px -1px 12px; padding: 8px 0; background: var(--menu-panel); z-index: 1; }
+#creature-panel .pack-nav button[aria-pressed=true] .menu-icon { background: #17382c; border-radius: 8px; padding: 5px; }
