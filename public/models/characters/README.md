@@ -42,3 +42,7 @@ Recreate the initial sources with `python scripts/characters/generate.py` only w
 - Material Maker: free/open-source procedural PBR authoring; the repository already contains actual generated log-end materials and editable graphs: https://www.materialmaker.org/
 - ArmorPaint: open-source texture painting with paid official prebuilt downloads; building from source is the free route. No paid binary was installed or required: https://armorpaint.org/
 - Meshoptimizer/gltfpack compression options and runtime decoder requirements: https://github.com/zeux/meshoptimizer/tree/master/gltf
+
+## Runtime browser policy
+
+The pinned r163 Emscripten decoder uses generated JavaScript bindings (`new Function`) as well as WebAssembly. The production CSP therefore permits `unsafe-eval` for this trusted, self-hosted dependency; it continues to block inline scripts and external script origins. Embedded GLB textures also require `blob:` in `connect-src`. Vite preview reads the same policy from netlify.toml for acceptance.

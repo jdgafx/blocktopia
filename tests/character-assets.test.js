@@ -1,3 +1,4 @@
+import { requireCharacterTextures } from '../src/game/character-loader.js';
 import { readFileSync } from 'node:fs';
 import { expect, it } from 'vitest';
 import * as THREE from 'three';
@@ -53,4 +54,10 @@ it('ships compressed GLBs with named ground joints, embedded palettes and animat
     expect(gltf.images[0].uri).toBeUndefined();
     expect(bytes.length).toBeLessThan(24000);
   }
+});
+
+it('rejects characters with missing embedded textures instead of showing white meshes',()=>{
+ const mesh={isMesh:true,material:{map:null}};const gltf={scene:{traverse:visit=>visit(mesh)}};
+ expect(()=>requireCharacterTextures(gltf)).toThrow('Character texture failed');
+ mesh.material.map={image:{width:64,height:64}};expect(()=>requireCharacterTextures(gltf)).not.toThrow();
 });

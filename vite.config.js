@@ -1,4 +1,6 @@
 import { defineConfig } from 'vite';
+import { readFileSync } from 'node:fs';
+const productionCsp=readFileSync(new URL('./netlify.toml',import.meta.url),'utf8').match(/Content-Security-Policy = "([^"]+)"/)[1];
 
 const isolationHeaders = {
   'Cross-Origin-Opener-Policy': 'same-origin',
@@ -6,7 +8,7 @@ const isolationHeaders = {
 };
 export default defineConfig({
   server: { headers: isolationHeaders },
-  preview: { headers: isolationHeaders },
+  preview: { headers: { ...isolationHeaders, 'Content-Security-Policy': productionCsp } },
   build: {
     target: 'es2020',
     rollupOptions: {
