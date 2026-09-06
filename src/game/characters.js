@@ -1,4 +1,3 @@
-import { TextureLoader } from '../engine/texture-loader.js';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { REGIONS } from './regions.js';
@@ -105,7 +104,7 @@ export class Characters {
   }
   person(index) {
     const model = PERSON_MODELS[index];
-    const texture = new TextureLoader().load(model.textures[0].source, undefined, undefined, error => {
+    const texture = new THREE.TextureLoader().load(model.textures[0].source, undefined, undefined, error => {
       console.error(`Character texture failed: ${model.name}`, error);
       const status = document.getElementById('menu-status');
       if (status) status.textContent = 'Character textures could not load. Reload to retry.';

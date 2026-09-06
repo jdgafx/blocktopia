@@ -1,10 +1,9 @@
-import { TextureLoader } from './texture-loader.js';
 import * as THREE from 'three';
 import { ATLAS_URL } from '../ui/atlas.js';
 
 // Existing BLOCK_DEFS tile order remains the material index contract.
 export function buildTerrainMaterials(renderer) {
-  const loader = new TextureLoader();
+  const loader = new THREE.TextureLoader();
   const pending = [], cache = new Map(), loaded = new Map();
   const anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
   function texture(url, color = false) {
