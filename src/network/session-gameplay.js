@@ -60,6 +60,7 @@ export function handleIntent(session, from, intent) {
   if (!session.ledger.apply(commit)) return reject('Action could not be applied');
   session.mutationTimes.set(from, result.mutationTimes);
   session.options.onSupplies?.(session.ledger.supplies);
+  if (commit.kind === 'block') session.voxelBroadcast?.send({ t: 'commit', commit });
   session.transport.broadcastControl({ t: 'commit', commit });
   return true;
 }

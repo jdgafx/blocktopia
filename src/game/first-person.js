@@ -1,7 +1,11 @@
 import * as THREE from 'three';
+import { BLOCK_DEFS } from '../constants/blocks.js';
 
 export class FirstPerson {
-  constructor(camera, scene) {
+  constructor(camera, scene, terrainMaterials = []) {
+    this.terrainMaterials = terrainMaterials;
+    this.lastHit = 0; this.shake = 0;
+    this.reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)');
     this.scene = scene; this.camera = camera; this.time = 0; this.swing = 0; this.lastAction = 0;
     this.hand = new THREE.Group(); camera.add(this.hand); scene.add(camera);
     this.hand.scale.setScalar(0.8);
@@ -24,27 +28,32 @@ export class FirstPerson {
     head.rotation.y = -.2;
     this.outline = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1.006, 1.006, 1.006)), new THREE.LineBasicMaterial({ color: 0xffe6a5, transparent: true, opacity: .85 }));
     scene.add(this.outline);
-    const canvas = document.createElement('canvas'); canvas.width = canvas.height = 128;
-    const ctx = canvas.getContext('2d'); ctx.strokeStyle = '#191d1b'; ctx.lineWidth = 2;
-    for (let n = 0; n < 9; n++) {
-      const angle = n * 2.399; ctx.beginPath(); ctx.moveTo(64, 64);
-      for (let j = 1; j <= 5; j++) ctx.lineTo(64 + Math.cos(angle + Math.sin(j * 7 + n) * .2) * j * 14, 64 + Math.sin(angle) * j * 14);
-      ctx.stroke();
-    }
-    this.cracks = new THREE.Mesh(new THREE.BoxGeometry(1.009, 1.009, 1.009), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(canvas), transparent: true, opacity: 0, depthWrite: false })); scene.add(this.cracks);
+    this.crackStages = Array.from({ length: 4 }, (_, stage) => {
+      const canvas = document.createElement('canvas'); canvas.width = canvas.height = 128;
+      const ctx = canvas.getContext('2d'); ctx.strokeStyle = '#171310'; ctx.lineWidth = 2 + stage;
+      for (let n = 0; n < 3 + stage * 2; n++) {
+        const angle = n * 2.399; ctx.beginPath(); ctx.moveTo(64, 64);
+        for (let j = 1; j <= 2 + stage; j++) ctx.lineTo(64 + Math.cos(angle + Math.sin(j * 7 + n) * .2) * j * 14, 64 + Math.sin(angle) * j * 14);
+        ctx.stroke();
+      }
+      return new THREE.CanvasTexture(canvas);
+    });
+    this.cracks = new THREE.Mesh(new THREE.BoxGeometry(1.009, 1.009, 1.009), new THREE.MeshBasicMaterial({ map: this.crackStages[0], transparent: true, opacity: .9, depthWrite: false })); scene.add(this.cracks);
     this.fragments = []; this.fragmentGeometry = new THREE.BoxGeometry(.075, .075, .075);
     this.fragmentMaterials = [0x798267, 0x725844, 0x777b7a, 0x98734c].map(color => new THREE.MeshLambertMaterial({ color }));
     document.addEventListener('pointerdown', () => {
       try { this.audio ??= new (window.AudioContext || window.webkitAudioContext)(); this.audio.resume().catch(() => {}); } catch {}
     });
   }
-  impact(x, y, z, blockId) {
+  impact(x, y, z, blockId, face = [0, 1, 0], count = 10) {
     if (Math.hypot(this.camera.position.x - x, this.camera.position.y - y, this.camera.position.z - z) > 24) return;
-    for (let i = 0; i < 10; i++) {
+    const tile = BLOCK_DEFS[blockId]?.[face[1] > 0 ? 'top' : face[1] < 0 ? 'bot' : 'side'];
+    const material = tile && this.terrainMaterials[tile[1] * 4 + tile[0]];
+    for (let i = 0; i < count; i++) {
       if (this.fragments.length >= 80) { const old = this.fragments.shift(); this.scene.remove(old.mesh); }
-      const mesh = new THREE.Mesh(this.fragmentGeometry, this.fragmentMaterials[[4, 8].includes(blockId) ? 3 : blockId === 1 || blockId === 5 ? 0 : blockId === 2 ? 1 : 2]);
-      mesh.position.set(x + .5, y + .5, z + .5); this.scene.add(mesh);
-      this.fragments.push({ mesh, life: .65, velocity: new THREE.Vector3((Math.random() - .5) * 3, Math.random() * 3 + 1, (Math.random() - .5) * 3) });
+      const mesh = new THREE.Mesh(this.fragmentGeometry, material ?? this.fragmentMaterials[[4, 8].includes(blockId) ? 3 : blockId === 1 || blockId === 5 ? 0 : blockId === 2 ? 1 : 2]);
+      mesh.position.set(x + .5 + face[0] * .52, y + .5 + face[1] * .52, z + .5 + face[2] * .52); this.scene.add(mesh);
+      this.fragments.push({ mesh, life: .65, velocity: new THREE.Vector3(face[0] * 2 + Math.sin(i * 2.399) * .8, face[1] * 2 + .8 + Math.sin(i * 4.13) * .6, face[2] * 2 + Math.cos(i * 2.399) * .8) });
     }
     this.sound();
   }
@@ -58,6 +67,16 @@ export class FirstPerson {
   }
   update(dt, player) {
     this.time += dt;
+    if (player.active && player.blockHit && player.blockHit.sequence !== this.lastHit) {
+      const hit = player.blockHit; this.lastHit = hit.sequence;
+      this.impact(hit.x, hit.y, hit.z, hit.blockId, hit.face, 4);
+      this.shake = .1;
+    }
+    this.shake = player.active ? Math.max(0, this.shake - dt) : 0;
+    if (!this.reducedMotion?.matches) {
+      this.camera.rotation.x += Math.sin(this.time * 85) * this.shake * .035;
+      this.camera.rotation.z += Math.sin(this.time * 67) * this.shake * .025;
+    }
     if (player.interactionSwing !== this.lastAction) { this.lastAction = player.interactionSwing; this.swing = 1; }
     if (player.isSwinging) this.swing = Math.max(this.swing, .6 + Math.sin(this.time * 22) * .4);
     else this.swing = Math.max(0, this.swing - dt * 6);
@@ -68,8 +87,13 @@ export class FirstPerson {
     const progress = document.getElementById('break-progress');
     if (progress) { progress.value = player.breakProgress ?? 0; progress.hidden = !player.active || !progress.value; }
     const hit = player.targetBlock;
-    this.outline.visible = this.cracks.visible = player.active && Boolean(hit);
-    if (hit) { this.outline.position.set(hit.x + .5, hit.y + .5, hit.z + .5); this.cracks.position.copy(this.outline.position); this.cracks.material.opacity = player.breakProgress ?? 0; }
+    this.outline.visible = player.active && Boolean(hit);
+    this.cracks.visible = this.outline.visible && player.breakProgress > 0;
+    if (hit) {
+      this.outline.position.set(hit.x + .5, hit.y + .5, hit.z + .5);
+      this.cracks.position.copy(this.outline.position);
+      this.cracks.material.map = this.crackStages[Math.min(3, Math.floor((player.breakProgress ?? 0) * 4))];
+    }
     for (let i = this.fragments.length - 1; i >= 0; i--) {
       const f = this.fragments[i]; f.life -= dt; f.velocity.y -= 9 * dt; f.mesh.position.addScaledVector(f.velocity, dt); f.mesh.rotation.x += dt * 4;
       f.mesh.scale.setScalar(Math.min(1, f.life * 4));

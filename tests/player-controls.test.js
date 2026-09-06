@@ -200,3 +200,58 @@ describe('pointer capture refusal recovery', () => {
     expect(player.active).toBe(false);
   });
 });
+
+describe('kinetic feedback', () => {
+  it('emits face-aware immediate hit feedback before the authoritative block break', () => {
+    const { player } = controls();
+    player.setActive(true);
+    player.beginInteraction('break');
+    player._handleBlockInteraction(.016);
+    expect(player.blockHit).toMatchObject({ x: 0, y: 1, z: -2, blockId: 4, face: [0, 0, 1], sequence: 1 });
+    expect(player._onBlockIntent).not.toHaveBeenCalled();
+    const sequence = player.blockHit.sequence;
+    player._handleBlockInteraction(.016);
+    expect(player.blockHit.sequence).toBe(sequence);
+    player._handleBlockInteraction(.08);
+    expect(player.blockHit.sequence).toBeGreaterThan(sequence);
+    player.setActive(false);
+    expect(player.blockHit).toBeNull();
+  });
+  it('smooths a small grounded bob and settles exactly toward the eye height when stopped', () => {
+    const { player } = controls();
+    player.setActive(true); player._physics.onGround = true;
+    player._moveDir = { x: 1, z: 0 };
+    player._updateCamera(.016);
+    const bob = player._camera.position.y - player.position.y - 1.6;
+    expect(bob).toBeGreaterThan(0); expect(bob).toBeLessThan(.025);
+    player._moveDir = { x: 0, z: 0 };
+    for (let i = 0; i < 60; i++) player._updateCamera(.016);
+    expect(player._camera.position.y).toBeCloseTo(player.position.y + 1.6, 6);
+  });
+});
+
+it.each(['keyboard', 'touch'])('retains a complete %s jump tap between frames and consumes it only once', input => {
+  const { player, document } = controls(5);
+  initTouchControls(player); player.setActive(true);
+  player._physics.onGround = true;
+  const startY = player.position.y;
+  const press = () => {
+    if (input === 'keyboard') document.emit('keydown', { code: 'Space' });
+    else document.getElementById('btn-jump').emit('touchstart');
+  };
+  const release = () => {
+    if (input === 'keyboard') document.emit('keyup', { code: 'Space' });
+    else document.getElementById('btn-jump').emit('touchend');
+  };
+  press(); release();
+  expect(player._keys.Space || player.touchJump).toBeFalsy();
+  player.update(.016);
+  expect(player.position.y).toBeGreaterThan(startY);
+  expect(player._physics._vy).toBeGreaterThan(0);
+  expect(player._jumpQueued).toBe(false);
+  const velocity = player._physics._vy;
+  player.update(.016);
+  expect(player._physics._vy).toBeLessThan(velocity);
+  press(); player.setActive(false); player.setActive(true);
+  expect(player._jumpQueued).toBe(false);
+});

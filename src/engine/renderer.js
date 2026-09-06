@@ -1,6 +1,12 @@
 import * as THREE from 'three';
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
-import { buildChunkMesh } from './mesher.js';
+import { geometryFromMesh } from './mesher.js';
+import { snapshotChunk } from './mesh-data.js';
+import { TerrainJobs } from './terrain-jobs.js';
+import { configureCharacterRenderer } from '../game/character-loader.js';
+import { createAvatarLibrary } from '../game/player-avatar.js';
+import { WaterSurface } from './water.js';
+import { Chunk } from './world.js';
 import { buildTerrainMaterials } from './terrain-materials.js';
 import { Vegetation } from './vegetation.js';
 import { Buildings } from './buildings.js';
@@ -9,7 +15,7 @@ import { INTERPOLATION_DELAY_MS, interpolateSamples } from '../network/protocol.
 
 export class Renderer {
   constructor(canvas, renderDistance = 4) {
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -28,22 +34,33 @@ export class Renderer {
     this._loadEnvironment();
     this.setQuality(renderDistance > 4 ? 'high' : 'balanced');
     this._material = buildTerrainMaterials(this.renderer);
+    this._water = new WaterSurface(this.renderer,this.camera);
+    this._material[15].dispose();this._material[15]=this._water.material;
     this._material.ready.catch((error) => {
       console.warn(error.message);
       const status = document.getElementById('menu-status');
       if (status) status.textContent = 'Some surface textures could not load. Reload to retry.';
     });
     this._chunkMeshes = new Map();
+    this._terrainJobs = new TerrainJobs();
+    this._chunkJobs = new Map();
+    this._chunkVersions = new Map();
+    this._wantedChunks = null;
+    this.meshMetrics = { submitMs: 0, applyMs: 0, lastEditLatencyMs: 0 };
+    window.addEventListener('pagehide',()=>{this._terrainJobs.dispose();this._water.dispose();},{once:true});
     this._vegetation = new Vegetation(this._material[5]);
     this._chunkVegetation = new Map();
     this._buildings = new Buildings(this._material);
     this._chunkBuildings = new Map();
     this._remoteSamples = new Map();
     this._remoteAvatars = new Map();
-    this._avatarBodyGeometry = new THREE.BoxGeometry(0.65, 1.15, 0.42);
-    this._avatarHeadGeometry = new THREE.BoxGeometry(0.55, 0.55, 0.55);
-    this._avatarBodyMaterial = new THREE.MeshLambertMaterial({ color: 0xb8643f });
-    this._avatarHeadMaterial = new THREE.MeshLambertMaterial({ color: 0xe4b184 });
+    configureCharacterRenderer(this.renderer);
+    this._avatarLibrary=createAvatarLibrary();
+    this.avatarReady=this._avatarLibrary.ready.then(()=>{
+      this._avatarLoaded=true;
+      for(const id of this._remoteSamples.keys())this._createRemoteAvatar(id);
+    });
+    this.avatarReady.catch(error=>this.reportTerrainError(error));
 
     window.addEventListener('resize', () => this._onResize());
   }
@@ -89,19 +106,19 @@ export class Renderer {
   }
 
   setQuality(quality) {
-    if (quality !== 'balanced' && quality !== 'high') throw new RangeError('Unknown graphics quality');
+    if (!['low','balanced','high'].includes(quality)) throw new RangeError('Unknown graphics quality');
     if (quality === this.quality) return;
     this.quality = quality;
-    const high = quality === 'high', size = high ? 2048 : 1024;
+    const high = quality === 'high', low=quality==='low', size = high ? 2048 : low ? 512 : 1024;
     this._shadowExtent = high ? 40 : 24;
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, high ? 2 : 1.5));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, high ? 2 : low ? 1 : 1.5));
     const shadow = this.sunLight.shadow, camera = shadow.camera;
     shadow.map?.dispose(); shadow.map = null;
     shadow.mapSize.set(size, size);
     camera.left = camera.bottom = -this._shadowExtent;
     camera.right = camera.top = this._shadowExtent;
     camera.updateProjectionMatrix();
-    this._setupFog(high ? 6 : 4);
+    this._setupFog(high ? 6 : low ? 3 : 4);
   }
 
   _setupFog(renderDistance) {
@@ -151,31 +168,60 @@ export class Renderer {
     this.renderer.setSize(window.innerWidth, window.innerHeight);
   }
 
+  ensureChunk(cx, cz, world) {
+    const key = `${cx},${cz}`;
+    if (this._chunkJobs.has(key)) return this._chunkJobs.get(key);
+    const existing = world.chunks.get(key);
+    let haloReady=true;
+    for(let z=cz-1;z<=cz+1;z++)for(let x=cx-1;x<=cx+1;x++)if(!world.chunks.has(`${x},${z}`))haloReady=false;
+    if (existing&&haloReady) return this.updateChunk(existing,world);
+    const pending = this._terrainJobs.run('generate',{seed:world.seed,generation:world.generation,cx,cz,edits:[...world.edits].map(([key,edits])=>[key,[...edits]])}).then(chunks=>{
+      if(this._chunkJobs.get(key)===pending)this._chunkJobs.delete(key);
+      if(!chunks)return;
+      if(this._wantedChunks&&!this._wantedChunks.has(key))return;
+      for(const raw of chunks)if(!world.chunks.has(`${raw.cx},${raw.cz}`)){
+        const chunk=Object.assign(new Chunk(raw.cx,raw.cz),raw);
+        // Edits committed while generation was in flight always win.
+        for(const [index,id] of world.edits.get(`${raw.cx},${raw.cz}`)??[]){chunk.data[index]=id;chunk.naturalBlocks.delete(index);chunk.buildingBlocks.delete(index);}
+        world.chunks.set(`${raw.cx},${raw.cz}`,chunk);
+      }
+      if(this._wantedChunks&&!this._wantedChunks.has(key))return;
+      return this.updateChunk(world.getChunk(cx,cz),world);
+    }).catch(error=>{if(this._chunkJobs.get(key)===pending)this._chunkJobs.delete(key);throw error;});
+    this._chunkJobs.set(key,pending);
+    return pending;
+  }
+
   updateChunk(chunk, world) {
-    const key = `${chunk.cx},${chunk.cz}`;
-    this._vegetationWorld = world;
-    this._updateVegetationChunk(chunk, world);
-    const oldBuilding = this._chunkBuildings.get(key);
-    if (oldBuilding) { this.scene.remove(oldBuilding); this._buildings.remove(oldBuilding); }
-    const building = this._buildings.build(chunk);
-    this.scene.add(building); this._chunkBuildings.set(key, building);
-    if (this._chunkMeshes.has(key)) {
-      const old = this._chunkMeshes.get(key);
-      this.scene.remove(old);
-      old.geometry.dispose();
-    }
-    const geo = buildChunkMesh(chunk, world);
-    if (geo._posCount === 0) { this._chunkMeshes.delete(key); return; }
-    const mesh = new THREE.Mesh(geo, this._material);
-    mesh.frustumCulled = true;
-    mesh.castShadow = mesh.receiveShadow = true;
-    this.scene.add(mesh);
-    this._chunkMeshes.set(key, mesh);
-    chunk.dirty = false;
-    // A canopy edit may belong to a root in another already-rendered chunk.
-    for (const other of world.chunks.values()) {
-      if (other !== chunk && other.dirty && this.hasChunk(other.cx, other.cz)) this.updateChunk(other, world);
-    }
+    const start=performance.now(), key=`${chunk.cx},${chunk.cz}`;
+    const version=(this._chunkVersions.get(key)??0)+1;this._chunkVersions.set(key,version);
+    const snapshot=snapshotChunk(chunk,world,globalThis.crossOriginIsolated===true);
+    this.meshMetrics.submitMs=performance.now()-start;
+    chunk.dirty=false;
+    const pending=this._terrainJobs.run('mesh',snapshot).then(data=>{
+      if(!data)return;
+      if(this._chunkVersions.get(key)!==version||(this._wantedChunks&&!this._wantedChunks.has(key)))return;
+      const applyStart=performance.now();
+      this._vegetationWorld=world;
+      this._updateVegetationChunk(chunk,world);
+      const oldBuilding=this._chunkBuildings.get(key);
+      if(oldBuilding){this.scene.remove(oldBuilding);this._buildings.remove(oldBuilding);}
+      const building=this._buildings.build(chunk);this.scene.add(building);this._chunkBuildings.set(key,building);
+      const old=this._chunkMeshes.get(key);if(old){this.scene.remove(old);old.geometry.dispose();}
+      const geo=geometryFromMesh(data), mesh=new THREE.Mesh(geo,this._material);
+      mesh.frustumCulled=true;mesh.castShadow=mesh.receiveShadow=true;
+      this.scene.add(mesh);this._chunkMeshes.set(key,mesh);
+      this.meshMetrics.applyMs=performance.now()-applyStart;
+      this.meshMetrics.lastEditLatencyMs=performance.now()-start;
+    }).finally(()=>{if(this._chunkJobs.get(key)===pending)this._chunkJobs.delete(key);});
+    this._chunkJobs.set(key,pending);
+    for(const other of world.chunks.values())if(other!==chunk&&other.dirty&&this.hasChunk(other.cx,other.cz))this.updateChunk(other,world).catch(error=>this.reportTerrainError(error));
+    return pending;
+  }
+
+  reportTerrainError(error){
+    this.terrainError=error.message;
+    const status=document.getElementById('menu-status');if(status)status.textContent=`Terrain could not update: ${error.message}. Reload to retry.`;
   }
 
   _updateVegetationChunk(chunk, world) {
@@ -196,6 +242,7 @@ export class Renderer {
 
   removeChunk(cx, cz) {
     const key = `${cx},${cz}`;
+    this._chunkVersions.set(key,(this._chunkVersions.get(key)??0)+1);
     const building = this._chunkBuildings.get(key);
     if (building) { this.scene.remove(building); this._buildings.remove(building); this._chunkBuildings.delete(key); }
     const vegetation = this._chunkVegetation.get(key);
@@ -213,6 +260,8 @@ export class Renderer {
   }
 
   retainChunks(keys) {
+    this._wantedChunks=keys;
+    this._terrainJobs.cancelOutside(keys);
     for (const key of this._chunkMeshes.keys()) {
       if (!keys.has(key)) this.removeChunk(...key.split(',').map(Number));
     }
@@ -228,23 +277,16 @@ export class Renderer {
     });
     if (samples.length > 20) samples.shift();
     this._remoteSamples.set(id, samples);
-    if (!this._remoteAvatars.has(id)) {
-      const avatar = new THREE.Group();
-      const body = new THREE.Mesh(this._avatarBodyGeometry, this._avatarBodyMaterial);
-      const head = new THREE.Mesh(this._avatarHeadGeometry, this._avatarHeadMaterial);
-      body.position.y = 0.75;
-      head.position.y = 1.58;
-      body.castShadow = body.receiveShadow = true;
-      head.castShadow = head.receiveShadow = true;
-      avatar.add(body, head);
-      this.scene.add(avatar);
-      this._remoteAvatars.set(id, avatar);
-    }
+    if (this._avatarLoaded&&!this._remoteAvatars.has(id)) this._createRemoteAvatar(id);
+  }
+
+  _createRemoteAvatar(id){
+    const avatar=this._avatarLibrary.create();this.scene.add(avatar);this._remoteAvatars.set(id,avatar);
   }
 
   removeRemotePlayer(id) {
     const avatar = this._remoteAvatars.get(id);
-    if (avatar) this.scene.remove(avatar);
+    if (avatar) {this.scene.remove(avatar);this._avatarLibrary.release(avatar);}
     this._remoteAvatars.delete(id);
     this._remoteSamples.delete(id);
   }
@@ -256,6 +298,7 @@ export class Renderer {
   }
 
   _updateRemotePlayers(now) {
+    const dt=Math.min(.05,(now-(this._lastRemoteFrame??now))/1000);this._lastRemoteFrame=now;
     for (const [id, samples] of this._remoteSamples) {
       const age = now - samples[samples.length - 1].at;
       if (age > 10000) {
@@ -263,11 +306,14 @@ export class Renderer {
         continue;
       }
       const avatar = this._remoteAvatars.get(id);
+      if(!avatar)continue;
       avatar.visible = age <= 2000;
       const state = interpolateSamples(samples, now - INTERPOLATION_DELAY_MS);
       if (!state) continue;
+      const speed=avatar.position.distanceTo(new THREE.Vector3().fromArray(state.position))/Math.max(dt,.001);
       avatar.position.fromArray(state.position);
       avatar.rotation.y = state.yaw;
+      if(avatar.visible&&this._vegetationWorld)this._avatarLibrary.update(avatar,dt,Math.min(6,speed),this._vegetationWorld);
     }
   }
 
@@ -276,6 +322,7 @@ export class Renderer {
     this._vegetation.update(performance.now() / 1000);
     this._updateLighting(Date.now());
     this._updateRemotePlayers(performance.now());
-    this.renderer.render(this.scene, this.camera);
+    this._material.time.value=performance.now()/1000;
+    this._water.render(this.scene,this._chunkMeshes,this._sunDirection,this.quality);
   }
 }

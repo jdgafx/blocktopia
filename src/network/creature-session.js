@@ -1,3 +1,4 @@
+import { VoxelBroadcast } from './voxel-broadcast.js';
 import { raycast } from '../engine/raycast.js';
 import { creatureAction, initialCreatureState, validCreatureState } from '../game/creature-state.js';
 import { stepCreatures } from '../game/creature-simulation.js';
@@ -28,6 +29,10 @@ export class CreatureSession {
     if (this.disposed) return;
     this.actors.set(s.playerId, this.actorId); this.ready = true;
     await this.resolveActors();
+    if (!this.disposed) {
+      s.voxelBroadcast?.close();
+      s.voxelBroadcast = new VoxelBroadcast(s);
+    }
   }
   async resolveActors() {
     if (this.pendingIdentity || this.disposed) return;

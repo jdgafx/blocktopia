@@ -51,6 +51,31 @@ it.skipIf(process.env.BLOCKTOPIA_LOCAL_SAVES_TEST !== '1')('persists exact snaps
     const row = await owner.create(original);
     created.push(row.id);
     expect(row.revision).toBe(1);
+    const binary = await clients[0].from('world_chunks').select().eq('world_id', row.id);
+    expect(binary.error).toBeNull();
+    expect(binary.data).toHaveLength(1);
+    expect(binary.data[0].voxel_data.startsWith('\\x42545601')).toBe(true);
+    const stored = await clients[0].from('saved_expeditions').select('snapshot').eq('id', row.id).single();
+    expect(stored.data.snapshot.entries).toEqual([]);
+    expect(stored.data.snapshot.chunkFormat).toBe('BTV1');
+    expect((await clients[1].from('world_chunks').select().eq('world_id', row.id)).data).toEqual([]);
+    const injected = await clients[1].from('world_chunks').insert({ world_id: row.id, chunk_x: 1, chunk_y: 0,
+      chunk_z: 1, voxel_data: binary.data[0].voxel_data });
+    expect(injected.error).toBeTruthy();
+    // Bad blobs roll back both the revision and the snapshot update.
+    const broken = await clients[0].rpc('save_binary_expedition', { expedition_id: row.id, expected_revision: 1,
+      expedition_name: 'Must roll back', world_seed: 99, world_mode: 'creative',
+      world_snapshot: stored.data.snapshot, chunks: [{ chunk_x: 0, chunk_y: 0, chunk_z: 0, voxel_data: '\\x00' }] });
+    expect(broken.error).toBeTruthy();
+    expect((await owner.load(row.id)).revision).toBe(1);
+    expect((await owner.load(row.id)).name).toBe(original.name);
+    const legacy = await clients[0].from('saved_expeditions').insert({ ...original, user_id: owner.userId }).select().single();
+    expect(legacy.error).toBeNull(); created.push(legacy.data.id);
+    expect((await owner.load(legacy.data.id)).snapshot).toEqual(original.snapshot);
+    await owner.save(legacy.data.id, 1, original);
+    expect((await clients[0].from('world_chunks').select().eq('world_id', legacy.data.id)).data).toHaveLength(1);
+    await owner.remove(legacy.data.id, 2);
+
     expect((await owner.load(row.id)).snapshot).toEqual(original.snapshot);
     expect((await owner.list()).find((save) => save.id === row.id)).not.toHaveProperty('snapshot');
     expect(await stranger.list()).toEqual([]);

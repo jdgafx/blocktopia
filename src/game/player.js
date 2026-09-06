@@ -18,6 +18,11 @@ export class Player {
     this._keys     = {};
     this._moveDir  = { x: 0, z: 0 };
     this._jump     = false;
+    this._jumpQueued = false;
+    this._bobPhase = this._bob = 0;
+    this._reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)');
+    this.blockHit = null;
+    this._hitSequence = 0;
     this._breaking = false;
     this._placing  = false;
     this._lastPlacing = false;
@@ -105,6 +110,7 @@ export class Player {
       if (!this.active || e.target.closest?.('input, textarea')) return;
       if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
       if (e.code === 'KeyE') { e.preventDefault(); this._onInventory?.(); return; }
+      if (e.code === 'Space' && !e.repeat && !this._keys.Space) this.requestJump();
       this._keys[e.code] = true;
       if (/^Digit[1-9]$/.test(e.code)) this.selectBlock(Number(e.code.slice(-1)) - 1);
     });
@@ -148,6 +154,10 @@ export class Player {
     }
   }
 
+  requestJump() {
+    if (this.active) this._jumpQueued = true;
+  }
+
   beginInteraction(kind, touch = false) {
     if (!this.active) return;
     if (kind === 'break') {
@@ -178,6 +188,10 @@ export class Player {
     this.isSwinging = false;
     this.touchMove = { x: 0, z: 0 };
     this.touchJump = this.touchBreak = this.touchPlace = false;
+    this._physics._jumpHeld = false;
+    this._physics._jumpBuffer = 0;
+    this._jumpQueued = false;
+    this.blockHit = null;
     document.getElementById('room-gate').hidden = active;
     if (active) document.getElementById('menu-status').textContent = '';
     document.getElementById('touch-controls').hidden = !active;
@@ -195,10 +209,11 @@ export class Player {
   }
 
   update(dt) {
-    if (!this.active) { this._updateCamera(); return; }
+    if (!this.active) { this._updateCamera(dt); return; }
     this._computeMoveDir();
-    this._physics.update(this.position, this._moveDir, this._jump || this.touchJump, dt);
-    this._updateCamera();
+    this._physics.update(this.position, this._moveDir, this._jump || this.touchJump, dt, this._jumpQueued);
+    this._jumpQueued = false;
+    this._updateCamera(dt);
     this._handleBlockInteraction(dt);
   }
 
@@ -224,8 +239,15 @@ export class Player {
     this._moveDir = len > 0 ? { x: mx / len, z: mz / len } : { x: 0, z: 0 };
   }
 
-  _updateCamera() {
-    this._camera.position.copy(this.position).add(new THREE.Vector3(0, 1.6, 0));
+  _updateCamera(dt = 0) {
+    const moving = this.active && this._physics.onGround && Math.hypot(this._moveDir.x, this._moveDir.z) > .1;
+    this._bobPhase += moving ? dt * 10 : 0;
+    const reducedMotion = this._reducedMotion?.matches;
+    const target = moving && !reducedMotion ? Math.sin(this._bobPhase) * .025 : 0;
+    this._bob += (target - this._bob) * (1 - Math.exp(-18 * dt));
+    this._camera.position.copy(this.position);
+    this._camera.position.y += 1.6 + this._bob;
+    this._camera.rotation.z = 0;
     this._camera.rotation.order = 'YXZ';
     this._camera.rotation.y = this._yaw;
     this._camera.rotation.x = this._pitch;
@@ -258,8 +280,11 @@ export class Player {
     this._breakQueued = false;
     if (this._placeQueued > 0) this._placeQueued--;
     this.isSwinging = breaking || place;
-    if (this._creatureInteraction?.(dt, breaking)) { this._breakTimer = 0; this._lastPlacing = placingNow; return; }
+    if (this._creatureInteraction?.(dt, breaking)) { this._breakTimer = this.breakProgress = 0; this._lastPlacing = placingNow; return; }
     if (breaking && hit && this._world.getBlock(hit.x, hit.y, hit.z) !== BLOCKS.BEDROCK) {
+      if (this._breakTimer === 0 || Math.floor(this._breakTimer / .1) !== Math.floor((this._breakTimer + dt) / .1)) {
+        this.blockHit = { ...hit, blockId: this._world.getBlock(hit.x, hit.y, hit.z), sequence: ++this._hitSequence };
+      }
       this._breakTimer += dt;
       if (this._breakTimer >= 0.3) {
         this._requestBlockChange(hit.x, hit.y, hit.z, BLOCKS.AIR);

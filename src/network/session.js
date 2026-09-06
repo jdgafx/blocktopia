@@ -397,6 +397,11 @@ export class MultiplayerSession {
       this._status('rtc-failure', 'Peer connection is not ready. Action was not applied.');
       return false;
     }
+    if (intent.kind === 'block' && this.voxelBroadcast?.ready) {
+      // RTC also carries the intent: broadcasts are transient and may be missed during reconnect.
+      // Intent IDs make delivery on both paths exactly-once at the authoritative ledger.
+      this.voxelBroadcast.send({ t: 'intent', intent });
+    }
     return true;
   }
 
@@ -404,6 +409,8 @@ export class MultiplayerSession {
     if (!message) return;
     if (this.creatureSystem?.receive(from, message)) return;
     if (this.role === 'host' && message.t === 'intent') {
+      // Both transports may deliver a voxel intent; suppress only that delivery duplicate.
+      if (message.intent?.kind === 'block' && this.ledger.seenIntentIds.has(message.intent.intentId)) return;
       this._handleIntent(from, message.intent);
     } else if (this.role === 'guest' && from === this.hostId) {
       if (message.t === 'commit') {
@@ -458,6 +465,7 @@ export class MultiplayerSession {
     }
   }
   async _leaveRoom() {
+    this.voxelBroadcast?.close(); this.voxelBroadcast = null;
     const oldChannel = this.channel, wasTracked = this.tracked;
     this.channel = null;
     this.channelGeneration++;

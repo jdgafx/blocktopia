@@ -9,8 +9,15 @@ import { BLOCKS } from '../src/constants/blocks.js';
 it('uses visible thin walls and roof surfaces for entry, collision and targeting', () => {
   const world = new World(29, 2), physics = new Physics(world);
   const position = { x: 18.3, y: 29, z: 2 };
-  for (let i = 0; i < 60; i++) physics.update(position, { x: 0, z: -1 }, false, 1 / 60);
-  expect(position.z).toBeCloseTo(-3, 5);
+  const clearFloor = new Physics({ isSolid: (_x, y) => y < 29 });
+  const unobstructed = { ...position };
+  for (let i = 0; i < 60; i++) {
+    physics.update(position, { x: 0, z: -1 }, false, 1 / 60);
+    clearFloor.update(unobstructed, { x: 0, z: -1 }, false, 1 / 60);
+  }
+  // Entry must travel as freely as open ground, including acceleration from rest.
+  expect(position.z).toBeCloseTo(unobstructed.z, 5);
+  expect(position.z).toBeLessThan(-2.5);
   expect(position.y).toBe(29);
   for (let i = 0; i < 60; i++) physics.update(position, { x: -1, z: 0 }, false, 1 / 60);
   expect(position.x).toBeCloseTo(15.66, 5);
@@ -22,10 +29,24 @@ it('uses visible thin walls and roof surfaces for entry, collision and targeting
   const rooftop = { x: 18.5, y: 38, z: -3.5 }, fall = new Physics(world);
   for (let i = 0; i < 120; i++) fall.update(rooftop, { x: 0, z: 0 }, false, 1 / 60);
   expect(rooftop.y).toBeCloseTo(35.5, 4);
-  for (let i = 0; i < 24; i++) fall.update(rooftop, { x: -1, z: 0 }, false, 1 / 60);
-  expect(rooftop.x).toBeCloseTo(16.5, 4);
-  for (let i = 0; i < 30; i++) fall.update(rooftop, { x: 1, z: 0 }, false, 1 / 60);
-  expect(rooftop.x).toBeCloseTo(19, 4);
+  const roofControl = new Physics({ isSolid: (_x, y) => y < 0 });
+  const openRoof = { ...rooftop, y: 0 }; roofControl.onGround = true;
+  for (let i = 0; i < 24; i++) {
+    fall.update(rooftop, { x: -1, z: 0 }, false, 1 / 60);
+    roofControl.update(openRoof, { x: -1, z: 0 }, false, 1 / 60);
+  }
+  expect(rooftop.x).toBeCloseTo(openRoof.x, 4);
+  expect(rooftop.x).toBeLessThan(17);
+  for (let i = 0; i < 30; i++) {
+    const previousX = rooftop.x;
+    fall.update(rooftop, { x: 1, z: 0 }, false, 1 / 60);
+    if (fall._vx >= 0) expect(rooftop.x).toBeGreaterThanOrEqual(previousX);
+  }
+  // The downslope briefly leaves the floor, so reversal uses air acceleration.
+  // It must return up the roof without collision pushback and reach the ridge.
+  expect(rooftop.x).toBeGreaterThan(18);
+  expect(rooftop.x).toBeLessThan(19);
+  expect(rooftop.y).toBeCloseTo(35.5, 4);
   expect(rooftop.y).toBeGreaterThan(35);
 
 });

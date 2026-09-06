@@ -43,8 +43,9 @@ describe('buildChunkMesh', () => {
       return BLOCKS.AIR;
     };
     const geo = buildChunkMesh(chunk, w);
-    // 2 blocks × 6 faces = 12 total, minus 2 shared internal faces = 10 exposed → 40 verts
-    expect(geo._posCount).toBe(10 * 4);
+    // Ten visible unit faces merge into six cuboid quads.
+    expect(geo._posCount).toBe(6 * 4);
+    expect(geo.userData.exposedFaces).toBe(10);
   });
 
   it('configures the production atlas for filtered top-origin sampling without atlas mip bleeding', () => {
@@ -80,8 +81,8 @@ describe('buildChunkMesh', () => {
     chunk.setBlock(0, 0, 0, BLOCKS.GLASS); chunk.setBlock(1, 0, 0, BLOCKS.GLASS);
     const world = { getBlock: (x, y, z) => y === 0 && z === 0 && (x === 0 || x === 1) ? BLOCKS.GLASS : BLOCKS.AIR };
     const geo = buildChunkMesh(chunk, world);
-    expect(geo._posCount).toBe(40);
-    expect(geo.groups).toEqual([{ start: 0, count: 60, materialIndex: 11 }]);
+    expect(geo._posCount).toBe(24);
+    expect(geo.groups).toEqual([{ start: 0, count: 36, materialIndex: 11 }]);
   });
 
   it('winds top and bottom triangles toward their declared normals', () => {

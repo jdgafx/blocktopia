@@ -5,15 +5,16 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "npm run build:assets && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "play": "node scripts/play.mjs"
+    "play": "node scripts/play.mjs",
+    "build:assets": "node scripts/characters/export.mjs"
   },
   "dependencies": {
-    "three": "^0.163.0",
     "@supabase/supabase-js": "^2.43.0",
-    "simplex-noise": "^4.0.1"
+    "simplex-noise": "^4.0.1",
+    "three": "^0.163.0"
   },
   "devDependencies": {
     "vite": "^5.2.0",

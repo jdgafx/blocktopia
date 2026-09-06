@@ -87,10 +87,14 @@ export function initTouchControls(player) {
   const btnPlace = document.getElementById('btn-place');
 
   btnJump.addEventListener('touchstart', (e) => {
-    e.preventDefault(); if (player.active) player.touchJump = true;
+    e.preventDefault();
+    if (player.active) {
+      if (!player.touchJump) player.requestJump();
+      player.touchJump = true;
+    }
   }, { passive: false });
   for (const event of ['touchend', 'touchcancel']) {
-    btnJump.addEventListener(event, (e) => { e.preventDefault(); player.touchJump = false; }, { passive: false });
+    btnJump.addEventListener(event, (e) => { e.preventDefault(); player.touchJump = false; if (event === 'touchcancel') player._jumpQueued = false; }, { passive: false });
   }
   for (const [button, kind] of [[btnBreak, 'break'], [btnPlace, 'place']]) {
     button.addEventListener('touchstart', (e) => {

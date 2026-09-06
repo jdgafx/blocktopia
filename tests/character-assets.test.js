@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { expect, it } from 'vitest';
 import * as THREE from 'three';
-import { buildBlockbenchCharacter, Characters } from '../src/game/characters.js';
+import { Characters } from '../src/game/characters.js';
+import { buildBlockbenchCharacter } from '../scripts/characters/blockbench.js';
 
 it('loads all editable NPC sources with correct scale, costume, pivots and independent interaction', () => {
   const bounds = new THREE.Box3();
@@ -34,4 +35,22 @@ it('loads all editable NPC sources with correct scale, costume, pivots and indep
   const characters = Object.create(Characters.prototype); characters.people = [{ region }];
   expect(characters.nearest({x:8, y:29, z:12})).toBe(region);
   expect(characters.nearest({x:8, y:29, z:14})).toBeUndefined();
+});
+
+it('ships compressed GLBs with named ground joints, embedded palettes and animated idle clips', () => {
+  for (const id of ['mara', 'ivo', 'neri', 'sol']) {
+    const bytes = readFileSync(new URL(`../public/models/characters/${id}.glb`, import.meta.url));
+    expect(bytes.readUInt32LE(0)).toBe(0x46546c67);
+    expect(bytes.readUInt32LE(8)).toBe(bytes.length);
+    const gltf = JSON.parse(bytes.subarray(20, 20 + bytes.readUInt32LE(12)).toString());
+    expect(gltf.extensionsRequired).toContain('EXT_meshopt_compression');
+    expect(gltf.extensionsRequired).toContain('KHR_texture_basisu');
+    expect(gltf.images[0].mimeType).toBe('image/ktx2');
+    expect(gltf.animations[0].name).toBe('idle');
+    expect(gltf.animations[0].channels).toHaveLength(3);
+    for (const name of ['head', 'left_arm', 'right_arm', 'left_leg', 'right_leg', 'left_knee', 'right_knee', 'left_ankle', 'right_ankle']) expect(gltf.nodes.some(node => node.name === name)).toBe(true);
+    expect(gltf.images[0].bufferView).toBeTypeOf('number');
+    expect(gltf.images[0].uri).toBeUndefined();
+    expect(bytes.length).toBeLessThan(24000);
+  }
 });

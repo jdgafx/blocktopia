@@ -18,9 +18,9 @@ it('loads verified local scans with correct PBR color spaces, mip filters and sh
   for (const index of [1, 6]) expect(materials[index].map.version).toBe(0);
   await materials.ready;
   expect(materials).toHaveLength(16);
-  expect(requests).toHaveLength(28);
+  expect(requests).toHaveLength(34);
   expect(materials.every(material => material.isMeshStandardMaterial)).toBe(true);
-  for (const index of [0, 2, 3, 4, 5, 7, 8, 9, 10, 12, 13, 14]) {
+  for (const index of [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13, 14]) {
     const material = materials[index];
     expect(material.map.colorSpace).toBe(THREE.SRGBColorSpace);
     expect(material.normalMap.colorSpace).toBe(THREE.NoColorSpace);
@@ -33,17 +33,11 @@ it('loads verified local scans with correct PBR color spaces, mip filters and sh
   expect(materials[3].normalMap).toBe(materials[12].normalMap);
   expect(materials[11].transparent).toBe(true);
   expect(materials[11].depthWrite).toBe(false);
-  for (const index of [1, 6]) {
-    const map = materials[index].map;
-    expect(map.image).toBeDefined();
-    expect(map.version).toBe(1);
-    expect(map.colorSpace).toBe(THREE.SRGBColorSpace);
-    expect(map.anisotropy).toBe(8);
-    expect(map.generateMipmaps).toBe(false);
-    expect(map.flipY).toBe(true);
+  for (const index of [0,1,2,3,4,5,6,7,8,9,10]) {
+    expect(materials[index].aoMap).toBe(materials[index].roughnessMap);
+    expect(materials[index].metalnessMap).toBe(materials[index].roughnessMap);
+    expect(materials[index].vertexColors).toBe(true);
   }
-  expect(materials[1].map.offset.y).toBeCloseTo(0.75 + 1 / 1254);
-  expect(materials[6].map.offset.y).toBeCloseTo(0.5 + 1 / 1254);
   const provenance = JSON.parse(readFileSync(new URL('../public/textures/pbr/provenance.json', import.meta.url)));
   expect(provenance.sources).toHaveLength(24);
   for (const source of provenance.sources) {

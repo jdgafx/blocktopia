@@ -37,7 +37,7 @@ git push origin feature/core-engine
 
 The hosted backend is the `blocktopia` project in the existing `cgdarkstardev`
 Supabase organization: https://supabase.com/dashboard/project/xuntmbxiupovuntwrqpr
-Its URL and publishable key are configured in Netlify, and all four migrations
+Its URL and publishable key are configured in Netlify, and all six migrations
 in `supabase/migrations/` are applied. Auth uses the live game URL and allows
 redirects beneath it. Only a publishable/anon key belongs in the client;
 service-role keys must never be used there.
@@ -60,6 +60,54 @@ Optional `VITE_TURN_URL`, `VITE_TURN_USERNAME`, and `VITE_TURN_CREDENTIAL` enabl
 a TURN relay for restrictive networks. Netlify serves the client; it does not
 replace Supabase or provide that relay. Browser-visible TURN credentials must
 be scoped appropriately by the relay provider.
+
+## Hosted terrain and multiplayer
+
+Account saves store changed voxels in `world_chunks.voxel_data` (`bytea`), grouped
+into 16³ chunks using the BTV1 sparse binary format. Untouched terrain comes from
+the saved seed and generation. `save_binary_expedition` atomically replaces chunk
+blobs and updates the save revision; `load_binary_expedition` reads both from one
+consistent database snapshot. Owner RLS isolates saves and chunks. Existing JSON
+saves load normally and convert on their next save. Story, creatures, supplies,
+and replay metadata remain in the expedition snapshot.
+
+Voxel intents and commits also use private Supabase Realtime Broadcast. The
+`broadcast_voxel_event` RPC verifies the registered account/peer binding and
+stamps the sender; clients cannot publish directly to that topic. The host still
+checks reach, inventory, epoch, replay IDs, and the 12-action/second limit. Ordered
+WebRTC delivery and snapshots retain reconnect and late-join recovery; duplicate
+voxel deliveries apply once. Movement continues over WebRTC.
+
+Core models, textures, and audio remain static files under `public/`, delivered
+by Netlify. There is currently no player-upload feature. Any future custom skins,
+models, or map uploads must go directly to Supabase Storage with owner-scoped
+policies, rather than attempting to write to Netlify's deployed filesystem.
+
+## Browser performance and rendering
+
+Graphics defaults to **Auto**. The game starts conservatively using device memory,
+CPU concurrency and touch capability, then adjusts viewing distance, shadow-map
+resolution and render resolution from sustained foreground frame times. Manual
+Performance/Balanced/High choices persist on that device. Paused and hidden tabs
+are excluded from tuning. All modes retain the world textures and character models.
+The application can request high-performance WebGL; browser GPU acceleration and
+operating-system power settings remain browser/user settings.
+
+Netlify and the local Vite server/preview send COOP `same-origin` and COEP
+`require-corp`. Isolated clients share terrain snapshots through SharedArrayBuffer;
+other clients use transferred ArrayBuffers. At most two terrain workers generate
+and greedily mesh chunks. Stale queued chunks are cancelled and newer edits replace
+old mesh results. The initial world gate waits for its terrain and required textures.
+
+Terrain uses tiled color/normal/packed ORM maps, vertex contact AO and adjacency-based
+wet roughness. Water uses an opaque scene/depth capture for absorption, refraction
+and shoreline foam, with matching distance fog. NPCs and peer avatars use optimized
+GLBs with Meshopt geometry and KTX2 textures and grounded two-bone legs.
+
+`npm run build` regenerates the character GLBs with a checksum-pinned native Linux
+x64 gltfpack release and copies the matching Three.js Basis decoder into `public`.
+No external asset origin is required at runtime. See the character README for the
+reproducible authoring commands and supported build platform.
 
 ## Free editable assets
 

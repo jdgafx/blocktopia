@@ -1,3 +1,4 @@
+import { encodeChunks, decodeChunks } from '../network/chunk-codec.js';
 export const MAX_SAVE_BYTES = 2 * 1024 * 1024;
 const METADATA = 'id,user_id,name,seed,mode,revision,updated_at';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -61,29 +62,42 @@ export class ExpeditionSaves {
   }
 
   async create(input) {
-    const { data, error } = await this.client.from('saved_expeditions')
-      .insert({ ...fields(input, true), user_id: this.userId }).select().single();
-    if (error) throw databaseError(error);
-    return data;
+    return this._write(null, null, fields(input, true));
   }
 
   async load(id) {
     validId(id);
-    const { data, error } = await this.client.from('saved_expeditions').select()
-      .eq('id', id).eq('user_id', this.userId).maybeSingle();
+    // One SQL statement reads the metadata and blobs from the same MVCC snapshot.
+    const { data, error } = await this.client.rpc('load_binary_expedition', { expedition_id: id });
     if (error) throw databaseError(error);
     if (!data) throw new Error('This saved expedition is no longer available.');
-    fields(data, true);
-    return data;
+    const { chunks, ...row } = data;
+    if (row.snapshot.chunkFormat === 'BTV1') {
+      const { chunkFormat, chunkCount, entryCount, ...snapshot } = row.snapshot;
+      const entries = decodeChunks(chunks);
+      if (chunks.length !== chunkCount || entries.length !== entryCount) throw new Error('Saved terrain is incomplete. Keep your open world and retry.');
+      row.snapshot = { ...snapshot, entries };
+    }
+    fields(row, true);
+    return row;
   }
 
   async save(id, revision, input) {
     validId(id); validRevision(revision);
-    const { data, error } = await this.client.from('saved_expeditions').update(fields(input))
-      .eq('id', id).eq('user_id', this.userId).eq('revision', revision).select().maybeSingle();
+    return this._write(id, revision, fields(input));
+  }
+
+  async _write(id, revision, input) {
+    const chunks = encodeChunks(input.snapshot.entries);
+    const { data, error } = await this.client.rpc('save_binary_expedition', {
+      expedition_id: id, expected_revision: revision, expedition_name: input.name ?? null,
+      world_seed: input.seed, world_mode: input.mode,
+      world_snapshot: { ...input.snapshot, entries: [], chunkFormat: 'BTV1', chunkCount: chunks.length, entryCount: input.snapshot.entries.length }, chunks,
+    });
     if (error) throw databaseError(error);
     if (!data) throw new SaveConflictError();
-    return data;
+    // The transaction returns metadata; preserve the exact captured live snapshot.
+    return { ...data, snapshot: input.snapshot };
   }
 
   async remove(id, revision) {

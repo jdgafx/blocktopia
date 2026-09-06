@@ -1,3 +1,4 @@
+import { AutoQuality, QUALITY_LEVELS } from './engine/auto-quality.js';
 import { decorateMenus } from './ui/icons.js';
 import './ui/menus.css';
 import { DefaultLoadingManager } from 'three';
@@ -209,6 +210,18 @@ function startGame(room) {
   if (world) return;
   world = new World(room.seed, room.generation ?? 1);
   renderer = new Renderer(document.getElementById('canvas'), renderDistance);
+  const autoQuality=new AutoQuality({cores:navigator.hardwareConcurrency,memory:navigator.deviceMemory,mobile:matchMedia('(pointer: coarse)').matches});
+  const qualityControl=document.getElementById('graphics-quality');
+  try{qualityControl.value=localStorage.getItem('blocktopia-quality')||'auto';}catch{}
+  if(!['auto',...QUALITY_LEVELS].includes(qualityControl.value))qualityControl.value='auto';
+  const applyQuality=quality=>{
+    renderer.setQuality(quality);renderDistance=quality==='high'?6:quality==='low'?3:4;
+    const status=document.getElementById('performance-status');
+    status.textContent=`${autoQuality.enabled?'Auto':'Manual'} · ${quality==='low'?'Performance':quality} · ${crossOriginIsolated?'Shared-memory workers':'Transferable workers'}`;
+  };
+  autoQuality.enabled=qualityControl.value==='auto';
+  applyQuality(autoQuality.enabled?QUALITY_LEVELS[autoQuality.level]:qualityControl.value);
+  if(import.meta.env.DEV||new URLSearchParams(location.search).has('diagnostics'))window.__THREE_GAME_DIAGNOSTICS__={renderer:renderer.renderer.info,terrain:renderer.meshMetrics,workers:renderer._terrainJobs.metrics,get quality(){return renderer.quality;},get isolated(){return crossOriginIsolated;},get world(){return {seed:world.seed,generation:world.generation,position:player?.position.toArray(),edits:[...world.edits].map(([key,values])=>[key,[...values]]),chunks:world.chunks.size,meshes:renderer._chunkMeshes.size,pending:renderer._chunkJobs.size};},get avatars(){return [...renderer._remoteAvatars.values()].map(a=>({position:a.position.toArray(),meshes:(()=>{let n=0;a.traverse(p=>{if(p.isMesh)n++;});return n;})()}));},get waters(){const points=[];for(const c of world.chunks.values()){for(let z=0;z<16;z++)for(let x=0;x<16;x++)if(c.getBlock(x,21,z)===14){points.push([c.cx*16+x,22,c.cz*16+z]);if(points.length===12)return points;}}return points;}};
   const lightingControl = document.getElementById('scene-lighting');
   const brightnessControl = document.getElementById('scene-brightness');
   try {
@@ -226,7 +239,7 @@ function startGame(room) {
   brightnessControl.addEventListener('input', applyLighting);
   applyLighting();
   player = new Player(world, renderer.camera);
-  firstPerson = new FirstPerson(renderer.camera, renderer.scene);
+  firstPerson = new FirstPerson(renderer.camera, renderer.scene, renderer._material);
   const creatures = new CreatureVisuals(world, renderer.scene);
   const creatureAudio = new CreatureAudio();
   const creatureSystem = session.creatureSystem = new CreatureSession(session, world, account.user.id);
@@ -255,22 +268,7 @@ function startGame(room) {
   invite.search = ''; invite.hash = ''; invite.searchParams.set('room', room.roomCode);
   history.replaceState(null, '', invite);
   document.getElementById('invite-url').value = invite.href;
-  Promise.all([renderer._material.ready, renderer._vegetation.ready, characters?.animalSkins.ready, creatures.ready, creatureSystem.readyPromise]).then(() => {
-    lastTime = performance.now();
-    loop();
-    document.getElementById('room-gate').classList.add('in-world');
-    playInstruction.textContent = navigator.maxTouchPoints > 0 ? 'Tap to play' : 'Click to play';
-    playButton.disabled = false;
-    playButton.title = 'Enter the world and start exploring';
-  }).catch((error) => {
-    document.getElementById('menu-status').textContent = error?.message || 'World textures or creature ownership could not load. Reload to try again.';
-    playInstruction.textContent = 'Reload world';
-    playButton.title = 'Reload the page to retry loading world textures';
-    playButton.disabled = false;
-    playButton.addEventListener('click', event => {
-      event.stopImmediatePropagation(); location.reload();
-    }, { capture: true, once: true });
-  });
+
 
   const changedChunks = new Set();
   let remeshQueued = false;
@@ -282,7 +280,7 @@ function startGame(room) {
       remeshQueued = false;
       for (const key of changedChunks) {
         const [x, z] = key.split(',').map(Number);
-        if (renderer.hasChunk(x, z)) renderer.updateChunk(world.getChunk(x, z), world);
+        if (renderer.hasChunk(x, z) || renderer._chunkJobs.has(key)) renderer.updateChunk(world.getChunk(x, z), world).catch(error=>renderer.reportTerrainError(error));
       }
       changedChunks.clear();
     });
@@ -298,6 +296,7 @@ function startGame(room) {
     if (lx === 15) remeshChunk(cx + 1, cz);
     if (lz === 0) remeshChunk(cx, cz - 1);
     if (lz === 15) remeshChunk(cx, cz + 1);
+    if ((lx===0||lx===15)&&(lz===0||lz===15)) remeshChunk(cx+(lx===0?-1:1),cz+(lz===0?-1:1));
   };
   player._onBlockChanged = remeshAt;
   player._onBlockIntent = (intent) => session.submitMutation(intent);
@@ -317,12 +316,13 @@ function startGame(room) {
 
   let pendingChunks = [];
   let initialTerrainBuilt = false;
+  const initialTerrain = [];
   function buildNextChunk() {
     const next = pendingChunks.shift();
     if (!next) return;
     const [cx, cz] = next;
-    const chunk = world.getChunk(cx, cz);
-    if (chunk.dirty || !renderer.hasChunk(cx, cz)) renderer.updateChunk(chunk, world);
+    const chunk = world.chunks.get(`${cx},${cz}`);
+    if (!chunk || chunk.dirty || !renderer.hasChunk(cx, cz)) return renderer.ensureChunk(cx,cz,world);
   }
   function loadChunksAround(px, pz) {
     const cx = Math.floor(px / 16);
@@ -343,16 +343,16 @@ function startGame(room) {
       (a[0] - cx) ** 2 + (a[1] - cz) ** 2 - (b[0] - cx) ** 2 - (b[1] - cz) ** 2);
     if (!initialTerrainBuilt) {
       // Populate the immediate spawn area before handing control to the player.
-      for (let i = 0; i < 9; i++) buildNextChunk();
+      for (let i = 0; i < 9; i++) initialTerrain.push(buildNextChunk());
       initialTerrainBuilt = true;
     }
   }
 
   refreshWorld = () => loadChunksAround(player.position.x, player.position.z);
   document.getElementById('graphics-quality').addEventListener('change', event => {
-    const quality = event.target.value;
-    renderDistance = quality === 'high' ? 6 : 4;
-    renderer.setQuality(quality); refreshWorld();
+    autoQuality.enabled=event.target.value==='auto';
+    try{localStorage.setItem('blocktopia-quality',event.target.value);}catch{}
+    applyQuality(autoQuality.enabled?QUALITY_LEVELS[autoQuality.level]:event.target.value);refreshWorld();
   });
   refreshWorld();
   for (const commit of pendingMutations.splice(0)) {
@@ -360,6 +360,23 @@ function startGame(room) {
     world.setBlock(commit.x, commit.y, commit.z, commit.blockId);
     remeshAt(commit.x, commit.y, commit.z);
   }
+
+  Promise.all([renderer.avatarReady, renderer._material.ready, renderer._vegetation.ready, characters?.animalSkins.ready, characters?.ready, creatures.ready, creatureSystem.readyPromise, ...initialTerrain]).then(() => {
+    lastTime = performance.now();
+    loop();
+    document.getElementById('room-gate').classList.add('in-world');
+    playInstruction.textContent = navigator.maxTouchPoints > 0 ? 'Tap to play' : 'Click to play';
+    playButton.disabled = false;
+    playButton.title = 'Enter the world and start exploring';
+  }).catch((error) => {
+    document.getElementById('menu-status').textContent = error?.message || 'World textures or creature ownership could not load. Reload to try again.';
+    playInstruction.textContent = 'Reload world';
+    playButton.title = 'Reload the page to retry loading world textures';
+    playButton.disabled = false;
+    playButton.addEventListener('click', event => {
+      event.stopImmediatePropagation(); location.reload();
+    }, { capture: true, once: true });
+  });
 
   let lastCX = Math.floor(player.position.x / 16);
   let lastCZ = Math.floor(player.position.z / 16);
@@ -387,12 +404,14 @@ function startGame(room) {
       lastCX = cx;
       lastCZ = cz;
     }
-    buildNextChunk();
+    buildNextChunk()?.catch(error=>renderer.reportTerrainError(error));
     if (now >= nextHudAt) {
       nextHudAt = now + 250;
       const position = player.position;
       info.textContent = `XYZ ${position.x.toFixed(1)} ${position.y.toFixed(1)} ${position.z.toFixed(1)} | FPS ${Math.round(1 / Math.max(elapsed, 0.001))}`;
     }
+    const tuned=autoQuality.sample(elapsed,player.active&&!document.hidden);
+    if(tuned){applyQuality(tuned);refreshWorld();}
     renderer.render();
   }
 }

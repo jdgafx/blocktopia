@@ -10,18 +10,24 @@ export class Physics {
     this._world = world;
     this._vy = 0;
     this.onGround = false;
+    this._vx = this._vz = 0;
+    this._coyote = this._jumpBuffer = 0;
+    this._jumpHeld = false;
   }
 
-  update(pos, moveDir, jump, dt) {
-    if (jump && this.onGround) {
-      this._vy = JUMP_VEL;
-      this.onGround = false;
-    }
-
+  update(pos, moveDir, jump, dt, jumpPressed = false) {
+    // Edge-triggered input prevents held jump from bouncing on every landing.
+    this._coyote = this.onGround ? .08 : Math.max(0, this._coyote - dt);
+    this._jumpBuffer = jumpPressed || (jump && !this._jumpHeld) ? .1 : Math.max(0, this._jumpBuffer - dt);
+    this._jumpHeld = jump;
+    if (this._jumpBuffer > 0 && this._coyote > 0) this._takeJump();
     this._vy = Math.max(this._vy + GRAVITY * dt, TERMINAL_VEL);
 
-    const vx = moveDir.x * MOVE_SPEED;
-    const vz = moveDir.z * MOVE_SPEED;
+    // Responsive ground control; airborne direction changes take at most 170 ms.
+    const acceleration = (this.onGround ? 80 : 60) * dt;
+    this._vx += Math.max(-acceleration, Math.min(acceleration, moveDir.x * MOVE_SPEED - this._vx));
+    this._vz += Math.max(-acceleration, Math.min(acceleration, moveDir.z * MOVE_SPEED - this._vz));
+    const vx = this._vx, vz = this._vz;
 
     pos.x += vx * dt;
     this._resolveX(pos);
@@ -31,6 +37,13 @@ export class Physics {
 
     pos.z += vz * dt;
     this._resolveZ(pos);
+    if (this.onGround && this._jumpBuffer > 0) this._takeJump();
+  }
+
+  _takeJump() {
+    this._vy = JUMP_VEL;
+    this.onGround = false;
+    this._coyote = this._jumpBuffer = 0;
   }
 
   _aabbMin(pos) {

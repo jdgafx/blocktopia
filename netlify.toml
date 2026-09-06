@@ -10,10 +10,12 @@
 [[headers]]
   for = "/*"
   [headers.values]
+    Cross-Origin-Opener-Policy = "same-origin"
+    Cross-Origin-Embedder-Policy = "require-corp"
     X-Frame-Options = "DENY"
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
-    Content-Security-Policy = "default-src 'self'; script-src 'self'; connect-src 'self' https://*.supabase.co wss://*.supabase.co; img-src 'self' data: blob:; worker-src blob:; style-src 'self' 'unsafe-inline'"
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self' https://*.supabase.co wss://*.supabase.co; img-src 'self' data: blob:; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'"
 
 [[headers]]
   for = "/assets/*"

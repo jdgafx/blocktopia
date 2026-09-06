@@ -1,0 +1,105 @@
+{
+  "exporter": "three GLTFExporter + native gltfpack v1.2, Meshopt + KTX2 UASTC",
+  "assets": [
+    {
+      "id": "mara",
+      "sourceSha256": "83bfc681f57182ab6ca4d9c729c47b9b5f363fcf263c9441b65330ea505a23d9",
+      "glbSha256": "bb528dc563d953c53da8372f02e0c8c2540386fc2dc0bf92381d39dd4038585e",
+      "bytes": 19856,
+      "triangles": 492,
+      "drawCalls": 10,
+      "clips": [
+        {
+          "name": "idle",
+          "channels": 3
+        }
+      ],
+      "joints": [
+        "head",
+        "left_arm",
+        "right_arm",
+        "left_ankle",
+        "left_knee",
+        "left_leg",
+        "right_ankle",
+        "right_knee",
+        "right_leg"
+      ]
+    },
+    {
+      "id": "ivo",
+      "sourceSha256": "540bba31f7c25d1bd2cc0fd06016c83cdd096d955a2cb5f67181216cfdf4414d",
+      "glbSha256": "d7ed99d78f5ff71012b6c7b65a0938df8e3efe8d210c7655d5a0ef1f13b53e2d",
+      "bytes": 19904,
+      "triangles": 492,
+      "drawCalls": 10,
+      "clips": [
+        {
+          "name": "idle",
+          "channels": 3
+        }
+      ],
+      "joints": [
+        "head",
+        "left_arm",
+        "right_arm",
+        "left_ankle",
+        "left_knee",
+        "left_leg",
+        "right_ankle",
+        "right_knee",
+        "right_leg"
+      ]
+    },
+    {
+      "id": "neri",
+      "sourceSha256": "bc8d423c4e10c840e2a61eb999e95f94c1899300747e1889d8d13c829ef16820",
+      "glbSha256": "06b3259d4e12f31f9e11c26b4b81b9d713f5c805765966b25c1a1f500476db5e",
+      "bytes": 20072,
+      "triangles": 504,
+      "drawCalls": 10,
+      "clips": [
+        {
+          "name": "idle",
+          "channels": 3
+        }
+      ],
+      "joints": [
+        "head",
+        "left_arm",
+        "right_arm",
+        "left_ankle",
+        "left_knee",
+        "left_leg",
+        "right_ankle",
+        "right_knee",
+        "right_leg"
+      ]
+    },
+    {
+      "id": "sol",
+      "sourceSha256": "e1cc110071129bac24fb4beb2be6d548e4024880f65e942033c80469e6ce4301",
+      "glbSha256": "62707c17e54d6ac0fcc0c441c0bfe4682bbd3c050c69cdac3efe08a0e40d1ba0",
+      "bytes": 19888,
+      "triangles": 492,
+      "drawCalls": 10,
+      "clips": [
+        {
+          "name": "idle",
+          "channels": 3
+        }
+      ],
+      "joints": [
+        "head",
+        "left_arm",
+        "right_arm",
+        "left_ankle",
+        "left_knee",
+        "left_leg",
+        "right_ankle",
+        "right_knee",
+        "right_leg"
+      ]
+    }
+  ]
+}

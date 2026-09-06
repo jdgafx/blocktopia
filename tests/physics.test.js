@@ -80,3 +80,49 @@ describe('Physics', () => {
     expect(phys.onGround).toBe(false);
   });
 });
+
+describe('forgiving kinematic jumps', () => {
+  const idle = { x: 0, z: 0 };
+  it('allows an 80ms ledge grace period but prevents a second midair jump', () => {
+    const physics = new Physics(solidWorld(() => false));
+    const position = { x: 0, y: 3, z: 0 };
+    physics.onGround = true;
+    physics.update(position, idle, false, .016);
+    physics.update(position, idle, true, .06);
+    expect(physics._vy).toBeGreaterThan(7);
+    physics.update(position, idle, false, .016);
+    const velocity = physics._vy;
+    physics.update(position, idle, true, .016);
+    expect(physics._vy).toBeLessThan(velocity);
+  });
+  it('rejects an expired ledge grace period', () => {
+    const physics = new Physics(solidWorld(() => false));
+    const position = { x: 0, y: 3, z: 0 };
+    physics.onGround = true;
+    physics.update(position, idle, false, .016);
+    physics.update(position, idle, false, .09);
+    physics.update(position, idle, true, .016);
+    expect(physics._vy).toBeLessThan(0);
+  });
+  it('buffers a jump before landing and does not bounce again while held', () => {
+    const physics = new Physics(solidWorld((x, y) => y < 0));
+    const position = { x: 0, y: .08, z: 0 };
+    physics._vy = -2;
+    physics.update(position, idle, true, .016);
+    expect(physics._vy).toBeLessThan(0);
+    physics.update(position, idle, true, .016);
+    physics.update(position, idle, true, .016);
+    expect(physics._vy).toBeGreaterThan(0);
+    for (let i = 0; i < 100; i++) physics.update(position, idle, true, .016);
+    expect(position.y).toBe(0);
+    expect(physics.onGround).toBe(true);
+  });
+  it('reverses air control promptly without instant velocity snapping', () => {
+    const physics = new Physics(solidWorld(() => false));
+    const position = { x: 0, y: 10, z: 0 };
+    physics.update(position, { x: 1, z: 0 }, false, .016);
+    expect(physics._vx).toBeCloseTo(.96);
+    for (let i = 0; i < 6; i++) physics.update(position, { x: -1, z: 0 }, false, .016);
+    expect(physics._vx).toBeLessThan(-4);
+  });
+});
