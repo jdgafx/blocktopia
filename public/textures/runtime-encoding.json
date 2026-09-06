@@ -1,0 +1,261 @@
+{
+  "encoder": "ImageMagick, JPEG quality 90 (4:4:4), WebP quality 82; dimensions unchanged; retain originals if smaller",
+  "files": [
+    {
+      "file": "pbr/bark_brown_02-color.jpg",
+      "dimensions": "1024x1024",
+      "sourceBytes": 659592,
+      "bytes": 511237,
+      "sourceSha256": "920fa0bed0c9d78c1d530e99795113afd532d7db746de440f4a85d7c83ed0f1a",
+      "sha256": "567cdd1b177388b7ce6517ca481abe6eca1d4c684f817e3703db86f02f1cea80"
+    },
+    {
+      "file": "pbr/bark_brown_02-normal.jpg",
+      "dimensions": "1024x1024",
+      "sourceBytes": 1015623,
+      "bytes": 775887,
+      "sourceSha256": "0d5e691e8ad8bcd093a3587887fda2a6b4a948b5708a4f256f7919584c6eb857",
+      "sha256": "6ae2c0524b2b9da804d2a3b886db49cbab8ea78391cc9df9e39516ecf74b1918"
+    },
+    {
+      "file": "pbr/bark_brown_02-roughness.jpg",
+      "dimensions": "1024x1024",
+      "sourceBytes": 337946,
+      "bytes": 256645,
+      "sourceSha256": "68125592de36e15bae7aa6db85c4d135aeb7e5653199ba226483a70f6d69837d",
+      "sha256": "506f2522f56f924d7f65acf5288104ffe26e8bb908ae89774f0e31ee4f5a442a"
+    },
+    {
+      "file": "pbr/brown_mud_rocks_01-color.jpg",
+      "dimensions": "1024x1024",
+      "sourceBytes": 887215,
+      "bytes": 695035,
+      "sourceSha256": "805675195f875f75b8f34410d8ead8b75c25643cdb2c0a8b0936d0f2698cce8c",
+      "sha256": "2e125ec31ca343455cca77dbccfd3e039b4299735ed25b4341e7405987183b7f"
+    },
+    {
+      "file": "pbr/brown_mud_rocks_01-normal.jpg",
+      "dimensions": "1024x1024",
+      "sourceBytes": 1400087,
+      "bytes": 1068275,
+      "sourceSha256": "755bb531b62b3395879d6df2aeb435d1c97104a0c61b6c0e50a428ce676af738",
+      "sha256": "d4ca2bba99b62057d3190991c7e0ec00e6c3ce91078ea66ffd735dd1152ae9c6"
+    },
+    {
+      "file": "pbr/brown_mud_rocks_01-roughness.jpg",
+      "dimensions": "1024x1024",
+      "sourceBytes": 719533,
+      "bytes": 580547,
+      "sourceSha256": "c1cb623c31d87eee0726a9881fd9f29ddc2b409538774e686f31a8998394598c",
+      "sha256": "b892cb3b9eca2f052f3d78f50cba067d99ae56c77c6d74438827936e040b69e3"
+    },
+    {
+      "file": "pbr/gravel_floor-color.jpg",
+      "dimensions": "1024x1024",
+      "sourceBytes": 1327302,
+      "bytes": 683744,
+      "sourceSha256": "4e6ff82988506676cfd8a79ac3e2964af239764c0064d4566040167704c4838d",
+      "sha256": "a23473ac7fbd0d74c4a3e8d43b930c4683686477bb47c0c29b37339815124134"
+    },
+    {
+      "file": "pbr/gravel_floor-normal.jpg",
+      "dimensions": "1024x1024",
+      "sourceBytes": 1538430,
+      "bytes": 837576,
+      "sourceSha256": "a3544e4aa7612a0bf0ea4890093b60c9f360234855d389bb9d408d29b90a7131",
+      "sha256": "eb254ce6ca066c6d6db2435a5fca6d4d5f9596169cd435beedb39f218627a481"
+    },
+    {
+      "file": "pbr/gravel_floor-roughness.jpg",
+      "dimensions": "1024x1024",
+      "sourceBytes": 697340,
+      "bytes": 292807,
+      "sourceSha256": "acf3c8607bcf943ac9f9871e4f57961ce46ea0635232d78af68eebbbf5f62b4b",
+      "sha256": "7c9a1205e1045fbe27f4ce690411b105adbb5ad3427653ade07341bd7f4bf74f"
+    },
+    {
+      "file": "pbr/rock_boulder_dry-color.jpg",
+      "dimensions": "1024x1024",
+      "sourceBytes": 859211,
+      "bytes": 389232,
+      "sourceSha256": "20f653a42fb24f42aa40641663070d578678da49af18cc1049dbdd4ed8679f3c",
+      "sha256": "bdf0201386702065ad11a1621af60fd3c96bc57ef48cfae04e718ee2bd8cb7db"
+    },
+    {
+      "file": "pbr/rock_boulder_dry-normal.jpg",
+      "dimensions": "1024x1024",
+      "sourceBytes": 802497,
+      "bytes": 324103,
+      "sourceSha256": "5915fea28a97357c78a04fb31c2516f1f7ed1b3a9cef4ae25aa93e4655e6c595",
+      "sha256": "f536aa171f23316dca8a5e1d140fe4a5614ed4493fe84c6a68a3d563f72e9cba"
+    },
+    {
+      "file": "pbr/rock_boulder_dry-roughness.jpg",
+      "dimensions": "1024x1024",
+      "sourceBytes": 668127,
+      "bytes": 273487,
+      "sourceSha256": "cc5229dd6bbdc4e817cb647e60242224b8e4f0237473ac018861ea243f2e8130",
+      "sha256": "452e500df368df59775db9960fd21428b43571dc523fc2564514b3dc089c70c3"
+    },
+    {
+      "file": "pbr/sand_01-color.jpg",
+      "dimensions": "1024x1024",
+      "sourceBytes": 485088,
+      "bytes": 364152,
+      "sourceSha256": "a73b90eaa6d675ef57e7d48a8cf23e1f412e353ab2e29cf73930b8ecd4e76875",
+      "sha256": "d9c3b2960eb9bdd11c4dd949e924be78c96dee7ea4767fcc953caf7aa15bf619"
+    },
+    {
+      "file": "pbr/sand_01-normal.jpg",
+      "dimensions": "1024x1024",
+      "sourceBytes": 877821,
+      "bytes": 662284,
+      "sourceSha256": "73984aecdc35b1ffbc322d64b7f8d8165b06970d11f37dd47010609fcb532704",
+      "sha256": "673c305a73a3e8f953c114f821acac10f5ad78d2b1f5cc7bc73c37fe03bc2de1"
+    },
+    {
+      "file": "pbr/sand_01-roughness.jpg",
+      "dimensions": "1024x1024",
+      "sourceBytes": 189667,
+      "bytes": 128567,
+      "sourceSha256": "ccb179b12c56a9032d60e4f4e2da690b3612a58e1784eb14576372690cdcd1cb",
+      "sha256": "cae95bbb51202646a2e2054a13bdb67bf09fa9eadb0514d646c4ccf6ebc0b37f"
+    },
+    {
+      "file": "pbr/sparse_grass-color.jpg",
+      "dimensions": "1024x1024",
+      "sourceBytes": 955945,
+      "bytes": 425731,
+      "sourceSha256": "ae94f2b34597b9108eefd88217f55eccaec6d6b382e858a478ee92df90e66617",
+      "sha256": "90468239aaadfb03afd341610f552d964c5e78504f7c119ab8a7d1c3222cd3cb"
+    },
+    {
+      "file": "pbr/sparse_grass-normal.jpg",
+      "dimensions": "1024x1024",
+      "sourceBytes": 1440314,
+      "bytes": 765374,
+      "sourceSha256": "1c840a24807346ddaaf94a5057aee4078fcec3a4cd84bfe45da7d3b480ef460b",
+      "sha256": "75b99fbf9d894e98a5fd6fa92d4127ac6e5a07b6c1f2219638abe88164192825"
+    },
+    {
+      "file": "pbr/sparse_grass-roughness.jpg",
+      "dimensions": "1024x1024",
+      "sourceBytes": 463340,
+      "bytes": 148516,
+      "sourceSha256": "9ebe6d03a9551c17d1802835c92c1442acb8f5d38d4874ee8c37770f11c4bed1",
+      "sha256": "a806ae2405a16dfd2747cecca89237ae57af0b92a2a2538b59d1bc29b5126381"
+    },
+    {
+      "file": "pbr/stone_brick_wall_001-color.jpg",
+      "dimensions": "1024x1024",
+      "sourceBytes": 259947,
+      "bytes": 259947,
+      "sourceSha256": "15fb31a178401eda2a2b86da539fa39021a08c7a43e902af785f99e18cba6311",
+      "sha256": "15fb31a178401eda2a2b86da539fa39021a08c7a43e902af785f99e18cba6311"
+    },
+    {
+      "file": "pbr/stone_brick_wall_001-normal.jpg",
+      "dimensions": "1024x1024",
+      "sourceBytes": 355904,
+      "bytes": 355904,
+      "sourceSha256": "7223aa10c71d38f313b63da8493a889208b020824ca691da5066c6c86125cc51",
+      "sha256": "7223aa10c71d38f313b63da8493a889208b020824ca691da5066c6c86125cc51"
+    },
+    {
+      "file": "pbr/stone_brick_wall_001-roughness.jpg",
+      "dimensions": "1024x1024",
+      "sourceBytes": 197026,
+      "bytes": 197026,
+      "sourceSha256": "a3c5e22f46d32652a93ed1e4de15e7d307cb338ab96c9fc746cfb1620b7950a7",
+      "sha256": "a3c5e22f46d32652a93ed1e4de15e7d307cb338ab96c9fc746cfb1620b7950a7"
+    },
+    {
+      "file": "pbr/wood_floor_deck-color.jpg",
+      "dimensions": "1024x1024",
+      "sourceBytes": 925789,
+      "bytes": 415989,
+      "sourceSha256": "1f2c623e87b0ee905f6f4ec8664dd19b4b135207c96e86198ff2919770b47166",
+      "sha256": "8d5207e17e3324207c591e0624703c21a87fb27bcfad7d3fabf21659c3fd9aec"
+    },
+    {
+      "file": "pbr/wood_floor_deck-normal.jpg",
+      "dimensions": "1024x1024",
+      "sourceBytes": 665094,
+      "bytes": 224249,
+      "sourceSha256": "2fa427b9196099c0ff72d1a1ab472e2a79ca2a76906a5c46d134f8a86e086d23",
+      "sha256": "55b6e226aebfed284124f4c681240ac57b0c93d83bbd0e515dcb8b265b205468"
+    },
+    {
+      "file": "pbr/wood_floor_deck-roughness.jpg",
+      "dimensions": "1024x1024",
+      "sourceBytes": 658448,
+      "bytes": 263356,
+      "sourceSha256": "5754d2c2a91a288bb257e0fa8c697d97b48472c9fb77c4c7f0ffcc302f3f60a2",
+      "sha256": "c3e9258429dc4212e1ecc7309c740017ded9cbc4372e8a05b4f94848861fdd18"
+    },
+    {
+      "file": "creatures/forest-dragon-color.webp",
+      "dimensions": "1600x1600",
+      "sourceBytes": 1317574,
+      "bytes": 668978,
+      "sourceSha256": "c9886addced3cae74b47316f5d247b08c945ae384f4d0ed33eafa828e6bebdb3",
+      "sha256": "c6262cdd70ced40dbf68b39a9ba07a5344dc97c57f3ebfd67a260e6b142420ba"
+    },
+    {
+      "file": "creatures/griffin-color.webp",
+      "dimensions": "1600x1600",
+      "sourceBytes": 1367826,
+      "bytes": 751342,
+      "sourceSha256": "05441113c049158a7231d0e032a6eb2cec1875a93189e9f20f414f87accc87dc",
+      "sha256": "ddd5f50225b73a7c6cbfd3ede6e7ca07e4f0497175d7093f86fcc495827bb828"
+    },
+    {
+      "file": "creatures/mammoth-color.webp",
+      "dimensions": "1600x1600",
+      "sourceBytes": 1492150,
+      "bytes": 835872,
+      "sourceSha256": "6f59b45e5634c80b695d62f90e951f98224e7b882fe5a972dcfae706052ac1a9",
+      "sha256": "99e5eb0cfc62b050aa7346d33c47b12e7a07b50251b4c31c9daa041f6024100d"
+    },
+    {
+      "file": "creatures/moonstag-color.webp",
+      "dimensions": "1600x1600",
+      "sourceBytes": 1241158,
+      "bytes": 745394,
+      "sourceSha256": "7d299b3619424853b696693b03db2c08db5b1873394166b0a9d9d2f4e9d17a9c",
+      "sha256": "4d8cf16b45f7fb5ad040f026e6c68ebae85060f54e07d7702825e8d1f8592687"
+    },
+    {
+      "file": "creatures/raptor-color.webp",
+      "dimensions": "1600x1600",
+      "sourceBytes": 1273894,
+      "bytes": 681030,
+      "sourceSha256": "76a84e35d7eafec59790784735c3501c73f58abee8d1a2a99f846eeba3e5908d",
+      "sha256": "29e91fc52a41c398589beb0431a586910fc9263ee7e7e30f4eb4b63d14345630"
+    },
+    {
+      "file": "creatures/stegosaur-color.webp",
+      "dimensions": "1600x1600",
+      "sourceBytes": 1216220,
+      "bytes": 648996,
+      "sourceSha256": "b01458165b33520165c53d78e63ea832152171b9d17c93e2a5236528659fa54f",
+      "sha256": "3ae470cd183893f2cf99e27484702ceeeab71216b18a456da9b237e2c95f2cb6"
+    },
+    {
+      "file": "animals/sauropod-color.webp",
+      "dimensions": "1600x1600",
+      "sourceBytes": 1251788,
+      "bytes": 730166,
+      "sourceSha256": "4b55c9f60894c50dd1690daf9d2e6c4601605c15e7240d15556ace519d14be6d",
+      "sha256": "1dcf77318fd9a284b95f45556cd286994d34bae398e2c0c9cae5458269beb913"
+    },
+    {
+      "file": "animals/triceratops-color.webp",
+      "dimensions": "1600x1600",
+      "sourceBytes": 1350716,
+      "bytes": 766220,
+      "sourceSha256": "5ce949476d2a7b4a19e18a78926708344476464989353fa4668bc2e1a5058567",
+      "sha256": "bd33c0b3ed0df953814a83f4837ed95507b98d5d38d90d74afded8fa5a1153c4"
+    }
+  ]
+}

@@ -62,6 +62,9 @@ be scoped appropriately by the relay provider.
 - Actual Watabou export and terrain adapter: [public/maps/README.md](public/maps/README.md).
 - Material Maker log-end PBR graph and export workflow: [scripts/materials/README.md](scripts/materials/README.md).
 - Existing PBR scans retain their sources in `public/textures/pbr/provenance.json`.
+- Runtime texture compression: `python scripts/textures/compress-runtime.py` (ImageMagick).
+  Dimensions are preserved; original copies stay in ignored `output/texture-originals/`.
+  `public/textures/runtime-encoding.json` records original and shipped hashes.
 - Cinematic sources and optimized-file hashes are in `public/media/provenance.json`.
 
 New worlds use terrain generation 3, which adds generated woodland approaches.
