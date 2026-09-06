@@ -51,6 +51,11 @@ Netlify builds fail with an explicit configuration error if the hosted URL or
 publishable key is absent, preserving the previous successful deployment.
 `npm run play` uses local Supabase independently of Netlify settings.
 
+On the Netlify site, Three.js uses Netlify Image CDN for 512px WebP runtime
+textures. The atlas retains its original dimensions for exact tile sampling.
+Local development loads the source files directly; new source commits invalidate
+Netlify's transformed copies as part of the deployment.
+
 Optional `VITE_TURN_URL`, `VITE_TURN_USERNAME`, and `VITE_TURN_CREDENTIAL` enable
 a TURN relay for restrictive networks. Netlify serves the client; it does not
 replace Supabase or provide that relay. Browser-visible TURN credentials must

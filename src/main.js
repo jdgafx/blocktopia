@@ -1,3 +1,5 @@
+import { DefaultLoadingManager } from 'three';
+import { hostedAssetUrl } from './engine/asset-urls.js';
 import { CreatureSession } from './network/creature-session.js';
 import { CreatureVisuals } from './game/creature-visuals.js';
 import { CreatureAudio } from './game/creature-audio.js';
@@ -15,6 +17,8 @@ import { FirstPerson } from './game/first-person.js';
 import { initAdventure } from './ui/adventure.js';
 import { initAccount } from './ui/account.js';
 import { MultiplayerSession } from './network/session.js';
+
+DefaultLoadingManager.setURLModifier(url => hostedAssetUrl(url, location.hostname));
 
 let renderDistance = 4;
 const lobby = document.getElementById('room-lobby');
