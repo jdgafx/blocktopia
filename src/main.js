@@ -252,6 +252,8 @@ function startGame(room) {
   history.replaceState(null, '', invite);
   document.getElementById('invite-url').value = invite.href;
   Promise.all([renderer._material.ready, renderer._vegetation.ready, characters?.animalSkins.ready, creatures.ready, creatureSystem.readyPromise]).then(() => {
+    lastTime = performance.now();
+    loop();
     document.getElementById('room-gate').classList.add('in-world');
     playInstruction.textContent = navigator.maxTouchPoints > 0 ? 'Tap to play' : 'Click to play';
     playButton.disabled = false;
@@ -389,5 +391,4 @@ function startGame(room) {
     }
     renderer.render();
   }
-  loop();
 }
