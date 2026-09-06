@@ -1,3 +1,4 @@
+import { TextureLoader } from '../engine/texture-loader.js';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { buildAnimal } from './animals.js';
@@ -171,7 +172,7 @@ export class CreatureVisuals {
   constructor(world, scene) {
     this.world = world; this.scene = scene; this.records = new Map(); this.templates = new Map(); this.materials = new Map(); this.disposed = false;
     this.raycaster = new THREE.Raycaster(); this.time = 0; this._lastTargetDistance = Infinity;
-    const loader = new THREE.TextureLoader(), pending = [];
+    const loader = new TextureLoader(), pending = [];
     this.common = { bone: new THREE.MeshStandardMaterial({ color: 0xc6b38b, roughness: .68 }), dark: new THREE.MeshStandardMaterial({ color: 0x2e2721, roughness: .85 }), eye: new THREE.MeshStandardMaterial({ color: 0x151c12, roughness: .16 }) };
     for (const species of SPECIES) {
       const map = new THREE.Texture(); map.colorSpace = THREE.SRGBColorSpace; map.wrapS = map.wrapT = THREE.MirroredRepeatWrapping; map.anisotropy = 4;

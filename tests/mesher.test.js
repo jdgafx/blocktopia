@@ -50,9 +50,7 @@ describe('buildChunkMesh', () => {
   it('configures the production atlas for filtered top-origin sampling without atlas mip bleeding', () => {
     const load = vi.spyOn(THREE.TextureLoader.prototype, 'load').mockImplementation(url => Object.assign(new THREE.Texture(), { url }));
     const texture = buildAtlas();
-    load.mockRestore();
-
-    expect(texture.url).toBe('/textures/natural-atlas.png');
+    expect(load).toHaveBeenCalledWith('/textures/natural-atlas.png', expect.any(Function), undefined, expect.any(Function));
     expect(texture.flipY).toBe(false);
     expect(texture.colorSpace).toBe('srgb');
     expect(texture.minFilter).toBe(THREE.LinearFilter);
@@ -60,6 +58,7 @@ describe('buildChunkMesh', () => {
     expect(texture.generateMipmaps).toBe(false);
     expect(texture.wrapS).toBe(THREE.ClampToEdgeWrapping);
     expect(texture.wrapT).toBe(THREE.ClampToEdgeWrapping);
+    load.mockRestore();
   });
 
   it('uses independent full-tile UVs and one non-overlapping draw group per material', () => {

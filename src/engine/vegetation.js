@@ -1,3 +1,4 @@
+import { TextureLoader } from './texture-loader.js';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { BLOCKS } from '../constants/blocks.js';
@@ -34,7 +35,7 @@ export class Vegetation {
     this.leafGeometry.computeVertexNormals();
     let resolveLeaf, rejectLeaf;
     this.ready = new Promise((resolve, reject) => { resolveLeaf = resolve; rejectLeaf = reject; });
-    const map = new THREE.TextureLoader().load('/textures/vegetation/leaf-color.png', resolveLeaf, undefined, () => {
+    const map = new TextureLoader().load('/textures/vegetation/leaf-color.png', resolveLeaf, undefined, () => {
       const status = document.getElementById('menu-status');
       if (status) status.textContent = 'Leaf textures could not load. Reload to retry.';
       rejectLeaf(new Error('Leaf textures could not load'));

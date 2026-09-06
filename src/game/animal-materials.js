@@ -1,3 +1,4 @@
+import { TextureLoader } from '../engine/texture-loader.js';
 import * as THREE from 'three';
 
 export function createAnimalSkins() {
@@ -5,7 +6,7 @@ export function createAnimalSkins() {
   const skins = ['sauropod', 'triceratops'].map(species => {
     let resolve, reject;
     pending.push(new Promise((yes, no) => { resolve = yes; reject = no; }));
-    const map = new THREE.TextureLoader().load(`/textures/animals/${species}-color.webp`, resolve,
+    const map = new TextureLoader().load(`/textures/animals/${species}-color.webp`, resolve,
       undefined, () => reject(new Error(`${species} skin could not load`)));
     map.colorSpace = THREE.SRGBColorSpace;
     // Generated patches have unmatched borders; mirroring keeps repeated edges continuous.
