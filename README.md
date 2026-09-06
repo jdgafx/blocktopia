@@ -35,13 +35,17 @@ npm run build
 git push origin feature/core-engine
 ```
 
-The hosted game requires a hosted Supabase project. Set `VITE_SUPABASE_URL` and
-`VITE_SUPABASE_PUBLISHABLE_KEY` in Netlify's environment settings. Apply the
-ordered migrations in `supabase/migrations/` to that project, then configure
-Supabase Auth's Site URL as `https://play-blocktopia.netlify.app/` and allow the
-same redirect URL for confirmation and password-reset links. Keep confirmation
-email delivery configured for public signups. Only a publishable/anon key belongs
-in the client; service-role keys must never be used there.
+The hosted backend is the `blocktopia` project in the existing `cgdarkstardev`
+Supabase organization: https://supabase.com/dashboard/project/xuntmbxiupovuntwrqpr
+Its URL and publishable key are configured in Netlify, and all four migrations
+in `supabase/migrations/` are applied. Auth uses the live game URL and allows
+redirects beneath it. Only a publishable/anon key belongs in the client;
+service-role keys must never be used there.
+
+Email/password signup enters the game immediately, with email confirmation off.
+Public password-reset email delivery still requires custom SMTP: Supabase's
+built-in sender only delivers to organization members. Configure SMTP before
+enabling confirmation emails or relying on password recovery for other players.
 
 Netlify builds fail with an explicit configuration error if the hosted URL or
 publishable key is absent, preserving the previous successful deployment.
