@@ -1,6 +1,7 @@
 import { BLOCK_DEFS, HOTBAR_BLOCKS } from '../constants/blocks.js';
 import { RECIPES, canCraft } from '../game/camp.js';
 
+import { itemIcon } from './icons.js';
 import { ITEM_DEFS, SUPPLY_IDS } from '../game/items.js';
 
 export function initCampUI(session, player) {
@@ -20,7 +21,8 @@ export function initCampUI(session, player) {
     const title = document.createElement('strong'); title.textContent = recipe.label;
     const cost = document.createElement('small'); cost.textContent = `${format(recipe.cost)} → ${format(recipe.output)}`;
     button.title = `Craft ${format(recipe.output)} using ${format(recipe.cost)}`;
-    button.append(title, cost);
+    const picture = document.createElement('span'); picture.innerHTML = itemIcon(Object.keys(recipe.output)[0]);
+    const text = document.createElement('span'); text.append(title, cost); button.append(picture, text);
     button.addEventListener('click', () => session.submitCraft(recipe.id));
     recipes.append(button); recipeButtons.set(recipe.id, button);
   }
@@ -38,7 +40,9 @@ export function initCampUI(session, player) {
       : 'Gather blocks to supply your camp. Everyone shares these materials. Craft together, then build with what you make.';
     supplies.hidden = recipes.hidden = creative;
     for (const [id, item] of materials) {
-      item.textContent = `${ITEM_DEFS[id].name} · ${stock[id] || 0}`;
+      item.innerHTML = itemIcon(id);
+      const label = document.createElement('span'); label.textContent = ITEM_DEFS[id].name;
+      const count = document.createElement('strong'); count.textContent = stock[id] || 0; item.append(label, count);
       item.dataset.item = id; item.dataset.count = stock[id] || 0;
     }
     for (const [id, button] of recipeButtons) button.disabled = !session.snapshotReady || !canCraft(stock, id);

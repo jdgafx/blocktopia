@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { icon, itemIcon } from './icons.js';
 import { ITEM_DEFS, PROVISIONS, SUPPLY_IDS } from '../game/items.js';
 import { raycast } from '../engine/raycast.js';
 import { SPECIES } from '../game/creature-species.js';
@@ -10,11 +11,26 @@ export function initCreatureUI(session, player, visuals, world, actorId) {
   const vitals = document.createElement('div'); vitals.id = 'creature-vitals'; vitals.setAttribute('aria-label', 'Player health and nourishment');
   const hurt = document.createElement('div'); hurt.id = 'creature-hurt';
   const hud = document.createElement('div'); hud.id = 'creature-hud'; hud.hidden = true;
-  const opener = document.createElement('button'); opener.id = 'open-creatures'; opener.textContent = 'Creatures · C'; opener.title = 'Inspect a nearby creature, manage provisions and command companions';
+  const opener = document.createElement('button'); opener.id = 'open-creatures'; opener.innerHTML = `${icon('wildlife')}<span>Wildlife · C</span>`; opener.classList.add('illustrated-control'); opener.title = 'Inspect a nearby creature, manage provisions and command companions';
   const dialog = document.createElement('dialog'); dialog.id = 'creature-panel'; dialog.setAttribute('aria-labelledby', 'creature-title');
-  dialog.innerHTML = `<button id="creature-close" type="button" title="Close creatures and return to the play menu">Close</button><h2 id="creature-title">Wildlife & provisions</h2><p id="creature-player"></p><p id="creature-description"></p><div id="creature-actions"></div><div id="creature-confirm"><p id="creature-confirm-copy"></p><button type="button" id="creature-confirm-yes">Confirm</button> <button type="button" id="creature-confirm-no">Cancel</button></div><p id="creature-feedback" role="status" aria-live="polite"></p><h3>Carried provisions & shared camp</h3><p>Harvest with your axe. Deposit meat into camp, cook it with one wood log, then withdraw the cooked meat to eat or carry. Feed eligible creatures their preferred food repeatedly; let trust grow between visits.</p><div id="creature-items"></div><button id="creature-forage" type="button" title="Gather fresh forage near leafy vegetation in Hearthwood">Gather forage</button> <button id="creature-cook" type="button" title="Use one raw meat and one wood log from shared camp">Cook camp meat</button><h3>Companions</h3><div id="creature-companions"></div>`;
+  dialog.innerHTML = `<header class="pack-header"><div><p class="eyebrow">Your expedition</p><h2 id="creature-title">Wildlife & supplies</h2></div><button id="creature-close" type="button" title="Close creatures and return to the play menu">Close ×</button></header>
+    <div id="creature-player" class="pack-vitals"></div>
+    <div class="pack-layout"><nav class="pack-nav" aria-label="Wildlife and supplies categories">
+      <button type="button" data-pack="wildlife" aria-controls="pack-wildlife" aria-pressed="true" title="Inspect and care for the selected animal">${icon('wildlife')}<span>Wildlife</span></button>
+      <button type="button" data-pack="supplies" aria-controls="pack-supplies" aria-pressed="false" title="See what you carry, share supplies and prepare food">${icon('bag')}<span>Supplies</span></button>
+      <button type="button" data-pack="companions" aria-controls="pack-companions" aria-pressed="false" title="Find and command your animal companions">${icon('companions')}<span>Companions</span></button>
+    </nav><div class="pack-content">
+      <section id="pack-wildlife" aria-label="Wildlife"><h3>Nearby wildlife</h3><div id="creature-description"></div><div id="creature-actions"></div><div id="creature-confirm"><p id="creature-confirm-copy"></p><button type="button" id="creature-confirm-yes">Confirm</button> <button type="button" id="creature-confirm-no">Cancel</button></div></section>
+      <section id="pack-supplies" aria-label="Supplies" hidden><h3>Your supplies</h3><p class="pack-hint">Store → shared camp · Take → your bag</p><div class="pack-tools"><button id="creature-forage" type="button" title="Gather fresh forage near leafy vegetation in Hearthwood">${icon('forage')}<span>Gather forage</span></button><button id="creature-cook" type="button" title="Use one raw meat and one wood log from shared camp">${icon('camp')}<span>Cook meat<small>1 raw meat + 1 camp log</small></span></button></div><div id="creature-items"></div></section>
+      <section id="pack-companions" aria-label="Companions" hidden><h3>Your companions</h3><p class="pack-hint">Feed and care for wildlife to build trust.</p><div id="creature-companions"></div></section>
+    </div></div><p id="creature-feedback" role="status" aria-live="polite"></p>`;
   document.getElementById('hud').append(hud, opener, vitals, hurt); document.body.append(dialog);
   const get = id => dialog.querySelector(`#${id}`);
+  function showCategory(category) {
+    dialog.querySelectorAll('[data-pack]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.pack === category)));
+    for (const name of ['wildlife', 'supplies', 'companions']) get(`pack-${name}`).hidden = name !== category;
+  }
+  dialog.querySelectorAll('[data-pack]').forEach(button => button.addEventListener('click', () => showCategory(button.dataset.pack)));
   let selected = null, aimed = null, lastRefresh = 0, pendingConfirm = null, lastHurtAt = 0;
   const state = () => session.ledger.creatures;
   const creature = () => state()?.creatures[selected];
@@ -38,8 +54,25 @@ export function initCreatureUI(session, player, visuals, world, actorId) {
   function render() {
     const focused = dialog.contains(document.activeElement) ? { title: document.activeElement.title, text: document.activeElement.textContent } : null;
     const c = creature(), meta = metadata(c), p = state()?.players[actorId], bag = p?.bag ?? {};
-    get('creature-player').textContent = `Health ${Math.round(p?.health ?? 100)}/100 · Nourishment ${Math.round(p?.hunger ?? 100)}/100`;
-    get('creature-description').textContent = c ? `${meta.label ?? c.species} · ${c.behavior} · Health ${Math.ceil(c.health)} · Fear ${Math.round(c.fear ?? 0)}/100 · Trust ${Math.round(c.trust?.[actorId] ?? 0)}/100 · Fed ${Math.round(c.hunger)}/100. ${c.temperament ?? meta.temperament ?? ''}. ${meta.help ?? ''} ${c.ownerId === actorId ? `Your companion · ${c.command}.` : c.ownerId ? 'Companion of another explorer.' : 'Approach gently, offer its preferred food, or leave it in peace.'}` : 'Aim the centre crosshair at a creature, then press C. You can avoid, hunt or befriend eligible individuals.';
+    const health = Math.round(p?.health ?? 100), food = Math.round(p?.hunger ?? 100);
+    get('creature-player').innerHTML = `<label>Health <strong>${health}/100</strong><meter min="0" max="100" low="25" value="${health}" aria-label="Health"></meter></label><label>Food <strong>${food}/100</strong><meter min="0" max="100" low="25" value="${food}" aria-label="Nourishment"></meter></label>`;
+    const description = get('creature-description'); const helpOpen = description.querySelector('details')?.open; description.replaceChildren();
+    const portrait = document.createElement('div'); portrait.className = 'wildlife-identity'; portrait.innerHTML = icon('wildlife');
+    const name = document.createElement('div'); const heading = document.createElement('h4');
+    heading.textContent = c ? meta.label ?? c.species : 'Choose an animal';
+    const behavior = document.createElement('p'); behavior.textContent = c ? `${c.behavior} · ${c.temperament ?? meta.temperament ?? ''}` : 'Aim at an animal, then press C.';
+    name.append(heading, behavior); portrait.append(name); description.append(portrait);
+    if (c) {
+      const stats = document.createElement('div'); stats.className = 'wildlife-stats';
+      for (const [label, value, max] of [['Health', Math.ceil(c.health), meta.health ?? c.health], ['Trust', Math.round(c.trust?.[actorId] ?? 0), 100], ['Fear', Math.round(c.fear ?? 0), 100], ['Fed', Math.round(c.hunger), 100]]) {
+        const stat = document.createElement('label'); stat.textContent = `${label} ${value}`;
+        const meter = document.createElement('meter'); meter.min = 0; meter.max = Math.max(1, max); meter.value = value; meter.setAttribute('aria-label', label); stat.append(meter); stats.append(stat);
+      }
+      description.append(stats);
+      const help = document.createElement('details'); help.open = Boolean(helpOpen); const summary = document.createElement('summary'); summary.textContent = 'About this animal';
+      const copy = document.createElement('p'); copy.textContent = `${meta.help ?? ''} ${c.ownerId === actorId ? `Your companion · ${c.command}.` : c.ownerId ? 'Companion of another explorer.' : 'Offer its preferred food and gentle care to build trust.'}`;
+      help.append(summary, copy); description.append(help);
+    }
     const actions = get('creature-actions'); actions.replaceChildren();
     if (c && !c.harvested) {
       const protectedOther = c.ownerId && c.ownerId !== actorId;
@@ -59,13 +92,18 @@ export function initCreatureUI(session, player, visuals, world, actorId) {
     const items = get('creature-items'); items.replaceChildren();
     for (const id of SUPPLY_IDS.filter(id => id >= 100 || bag[id] || session.ledger.supplies[id] || c?.bag?.[id])) {
       const row = document.createElement('div'); row.className = 'provision-row';
-      const label = document.createElement('span'); label.textContent = `${ITEM_DEFS[id].name} · Carry ${bag[id] ?? 0} · Camp ${session.ledger.supplies[id] ?? 0}${c?.ownerId === actorId ? ` · Companion ${c.bag?.[id] ?? 0}` : ''}`; row.append(label);
-      button(row, 'Store 1', 'Deposit one carried item into shared camp storage', 'deposit', { itemId: id, count: 1 }, !bag[id]);
-      button(row, 'Take 1', 'Withdraw one item from shared camp into your carried provisions', 'withdraw', { itemId: id, count: 1 }, !session.ledger.supplies[id]);
-      if ([101, 105].includes(id)) button(row, 'Eat', 'Consume one carried food item', 'eat', { itemId: id }, !bag[id]);
+      const picture = document.createElement('span'); picture.className = 'item-picture'; picture.innerHTML = itemIcon(id);
+      const label = document.createElement('span'); label.className = 'item-label';
+      const name = document.createElement('strong'); name.textContent = ITEM_DEFS[id].name;
+      const counts = document.createElement('small'); counts.textContent = `Bag ${bag[id] ?? 0}   ·   Camp ${session.ledger.supplies[id] ?? 0}${c?.ownerId === actorId ? `   ·   Companion ${c.bag?.[id] ?? 0}` : ''}`;
+      label.append(name, counts); row.append(picture, label);
+      const rowActions = document.createElement('div'); rowActions.className = 'item-actions'; row.append(rowActions);
+      button(rowActions, 'Store 1', 'Deposit one carried item into shared camp storage', 'deposit', { itemId: id, count: 1 }, !bag[id]);
+      button(rowActions, 'Take 1', 'Withdraw one item from shared camp into your carried provisions', 'withdraw', { itemId: id, count: 1 }, !session.ledger.supplies[id]);
+      if ([101, 105].includes(id)) button(rowActions, 'Eat', 'Consume one carried food item', 'eat', { itemId: id }, !bag[id]);
       if (c?.ownerId === actorId && (meta.capacity ?? meta.carryCapacity ?? 0) > 0) {
-        if (c.health > 0) button(row, 'Load 1', 'Transfer one carried item to your nearby companion', 'load', { itemId: id, count: 1 }, !bag[id]);
-        button(row, 'Unload 1', 'Retrieve one item from your nearby companion', 'unload', { itemId: id, count: 1 }, !c.bag?.[id]);
+        if (c.health > 0) button(rowActions, 'Load 1', 'Transfer one carried item to your nearby companion', 'load', { itemId: id, count: 1 }, !bag[id]);
+        button(rowActions, 'Unload 1', 'Retrieve one item from your nearby companion', 'unload', { itemId: id, count: 1 }, !c.bag?.[id]);
       }
       items.append(row);
     }
@@ -74,12 +112,12 @@ export function initCreatureUI(session, player, visuals, world, actorId) {
     if (!owned.length) companions.textContent = 'No companions yet. Build trust through patient feeding and care.';
     for (const companion of owned) {
       const b = document.createElement('button'); b.type = 'button'; b.textContent = `${metadata(companion).label ?? companion.species} · ${Math.round(Math.hypot(companion.x-player.position.x, companion.z-player.position.z))} m · ${companion.command}`;
-      b.title = 'Inspect this companion; commands require being nearby'; b.onclick = () => { selected = companion.id; render(); }; companions.append(b);
+      b.title = 'Inspect this companion; commands require being nearby'; b.onclick = () => { selected = companion.id; showCategory('wildlife'); render(); }; companions.append(b);
     }
     if (focused?.title) [...dialog.querySelectorAll('button')].find(b => b.title === focused.title && b.textContent === focused.text)?.focus({ preventScroll: true });
   }
   function open() {
-    selected = aimed; document.exitPointerLock?.(); player.setActive(false); render();
+    selected = aimed; showCategory('wildlife'); document.exitPointerLock?.(); player.setActive(false); render();
     if (!dialog.open) dialog.showModal();
   }
   get('creature-close').onclick = () => dialog.close(); opener.onclick = open;

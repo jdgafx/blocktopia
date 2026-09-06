@@ -1,3 +1,5 @@
+import { decorateMenus } from './ui/icons.js';
+import './ui/menus.css';
 import { DefaultLoadingManager } from 'three';
 import { hostedAssetUrl } from './engine/asset-urls.js';
 import { CreatureSession } from './network/creature-session.js';
@@ -21,6 +23,8 @@ import { MultiplayerSession } from './network/session.js';
 DefaultLoadingManager.setURLModifier(url => hostedAssetUrl(url, location.hostname));
 
 let renderDistance = 4;
+decorateMenus();
+
 const lobby = document.getElementById('room-lobby');
 const playGate = document.getElementById('play-gate');
 const lobbyStatus = document.getElementById('lobby-status');
