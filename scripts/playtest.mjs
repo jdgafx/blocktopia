@@ -3,7 +3,8 @@
 // - Work per frame: renderer draw calls and triangles on a route scripted by frame number (virtual clock, seeded random,
 //   auto quality pinned), so the same code gives the same counts on any host load.
 // - Speed: time inside the game's frame callback, OLD vs NEW in the same run, so host load hits both alike.
-// Ends with exactly one line: PLAYTEST PASSED (exit 0) or PLAYTEST FAILED (exit 1). Usage: npm run playtest
+// Ends with exactly one line: PLAYTEST PASSED (exit 0) or PLAYTEST FAILED (exit 1), also after a refusal or a setup error. Usage: npm run playtest
+// Run length: PLAYTEST_MAX_MS (default 9 min) is shared out over the four runs; each takes as many rounds as its share allows (at least MIN_ROUNDS).
 import { execFile, execFileSync } from 'node:child_process';
 import { createServer } from 'node:http';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
@@ -19,8 +20,12 @@ process.chdir(ROOT);
 const { chromium } = await (async () => {
   const load = async spec => { const m = await import(spec); return m.chromium ? m : m.default; };
   try { return await load('playwright-core'); } catch {}
-  const common = execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], { encoding: 'utf8' }).trim();
-  return load(pathToFileURL(createRequire(join(dirname(resolve(common)), 'x.js')).resolve('playwright-core')).href);
+  try {
+    const common = execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], { encoding: 'utf8' }).trim();
+    return await load(pathToFileURL(createRequire(join(dirname(resolve(common)), 'x.js')).resolve('playwright-core')).href);
+  } catch {}
+  console.error('playtest: playwright-core is not installed (it is listed in package.json). Run npm install in the main checkout.');
+  process.exit(1);
 })();
 const env = process.env;
 const RESULTS = 'playtest-results';
@@ -28,9 +33,16 @@ const OLD_REF = env.PLAYTEST_OLD_REF || 'feature/core-engine';
 const ICD = env.PLAYTEST_VK_ICD || '/usr/share/vulkan/icd.d/intel_icd.json';
 const SOFTWARE = /swiftshader|llvmpipe|software|softpipe/i;
 const BUDGET = 0.10; // NEW fails when work per frame or frame work time is more than 10% over OLD
-const ROUNDS = Math.max(2, Number(env.PLAYTEST_ROUNDS) || 90); // turns per build; each turn is FRAMES scripted frames
+const ROUNDS = Math.max(2, Number(env.PLAYTEST_ROUNDS) || 90); // most turns per build; each turn is FRAMES scripted frames
+const MIN_ROUNDS = Math.min(ROUNDS, 12); // fewest turns per build, kept even when the host is so busy that the run's time is used up
+const MAX_MS = Number(env.PLAYTEST_MAX_MS) || 540_000; // soft limit for the whole run; the hard limit is MAX_MS + 30 s (the check allows 10 min)
+const T0 = Date.now();
 const FRAMES = Math.max(5, Number(env.PLAYTEST_FRAMES) || 15); // short turns: host load drifts, so old and new must meet it within a few frames of each other
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+let verdictPrinted = false;
+const verdict = ok => { if (verdictPrinted) return; verdictPrinted = true; (ok ? console.log : console.error)(ok ? 'PLAYTEST PASSED' : 'PLAYTEST FAILED'); };
+// Every way out ends with the one verdict line: a refusal, a setup error, a signal. Only verdict(true) gives exit 0.
+process.on('exit', () => { if (!verdictPrinted) { verdict(false); process.exitCode = 1; } });
 const die = msg => { console.error(`playtest: ${msg}`); process.exit(1); };
 const median = a => { const s = [...a].sort((x, y) => x - y); return s.length ? (s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2) : 0; };
 const mean = a => a.length ? Math.round(a.reduce((x, y) => x + y, 0) / a.length) : 0;
@@ -74,7 +86,7 @@ const EMAIL = 'playtest-player@example.test';
 const PASSWORD = 'Playtest-Local-1!';
 const temps = []; const servers = [];
 
-function serve(root, port) {
+function serve(root) {
   const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.webp': 'image/webp', '.png': 'image/png', '.jpg': 'image/jpeg', '.glb': 'model/gltf-binary', '.wasm': 'application/wasm' };
   const origin = new URL(supabaseUrl).origin;
   // Production CSP plus the local database address; built from the real header so it cannot drift.
@@ -88,7 +100,7 @@ function serve(root, port) {
         'Cross-Origin-Opener-Policy': 'same-origin', 'Cross-Origin-Embedder-Policy': 'require-corp', 'Content-Security-Policy': csp });
       res.end(body);
     });
-    s.once('error', reject).listen(port, '127.0.0.1', () => { servers.push(s); resolve(s); });
+    s.once('error', reject).listen(0, '127.0.0.1', () => { servers.push(s); resolve(`http://127.0.0.1:${s.address().port}`); }); // a free port: a leftover run cannot block this one
   });
 }
 async function cleanup() {
@@ -102,7 +114,9 @@ async function cleanup() {
       `delete from public.blocktopia_room_actors where user_id = ${who}; delete from public.saved_expeditions where user_id = ${who};`], { stdio: 'ignore' });
   } catch { console.error("playtest: could not remove the test player's rows from the local database"); }
 }
-for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => cleanup().finally(() => process.exit(130)));
+for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(sig, () => cleanup().finally(() => process.exit(130)));
+// Backstop: a run that hangs (a build, a page) ends itself, so a killed parent never leaves it holding the machine.
+setTimeout(() => { console.error(`playtest: the run's time limit passed (${Math.round(MAX_MS / 1000)} s)`); cleanup().finally(() => process.exit(1)); }, MAX_MS + 60_000).unref();
 
 // Build one tree (the working tree, or a plain export of OLD_REF) into its own temp dir.
 async function build(tree) {
@@ -111,7 +125,7 @@ async function build(tree) {
   return dist;
 }
 function exportOld() {
-  try { execFileSync('git', ['rev-parse', '--verify', '--quiet', `${OLD_REF}^{commit}`], { stdio: 'ignore' }); } catch { die(`PLAYTEST_OLD_REF=${OLD_REF} is not a git commit or branch here.`); }
+  try { execFileSync('git', ['rev-parse', '--verify', '--quiet', `${OLD_REF}^{commit}`], { stdio: 'ignore' }); } catch { throw new Error(`PLAYTEST_OLD_REF=${OLD_REF} is not a git commit or branch here.`); }
   const dir = mkdtempSync(join(tmpdir(), 'bt-old-')); temps.push(dir);
   execFileSync('sh', ['-c', `git archive "$0" | tar -x -C "$1"`, OLD_REF, dir]);
   symlinkSync(realpathSync('node_modules'), join(dir, 'node_modules'));
@@ -134,6 +148,9 @@ function pageHarness({ code, quality, seed }) {
   // The first read in a frame is exactly the virtual time (the sim's dt stays identical on every run); later reads in the same frame add the
   // real time elapsed, so a loop that waits on performance.now() (a slow build) still ends.
   performance.now = () => { if (!S.useVirt) return realNow(); if (S.first) { S.first = false; S.vr = realNow(); return S.virt; } return S.virt + realNow() - S.vr; };
+  // The game also reads Date.now() (day/night light, animal animation): during a turn it gives a fixed date plus the scripted time, so frame N looks the same on every run.
+  const realDate = Date.now.bind(Date);
+  Date.now = () => (S.useVirt ? 1.76e12 + S.virt - S.virt0 : realDate());
   const rng = s => () => { s = (s + 0x6D2B79F5) | 0; let t = Math.imul(s ^ (s >>> 15), 1 | s); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
   const canvas = () => document.getElementById('canvas');
   const key = (type, code) => document.dispatchEvent(new KeyboardEvent(type, { code, bubbles: true }));
@@ -178,7 +195,7 @@ function pageHarness({ code, quality, seed }) {
     if (S.turn && S.turn.ms.length >= S.turn.want) { S.turn.done?.(); S.turn = null; S.mode = 'paused'; S.useVirt = false; return void realRAF(tick); }
     run(cb, t, S.settled);
   });
-  S.runTurn = want => new Promise(done => { FRAMES_PER_TURN = want; S.turn = { want, ms: [], calls: [], tris: [], done: () => done({ ms: S.last.ms, calls: S.last.calls, tris: S.last.tris, unfocused: S.unfocused }) }; S.last = S.turn; if (!S.virt) S.virt = realNow(); S.useVirt = true; S.mode = 'measure'; });
+  S.runTurn = want => new Promise(done => { FRAMES_PER_TURN = want; S.turn = { want, ms: [], calls: [], tris: [], done: () => done({ ms: S.last.ms, calls: S.last.calls, tris: S.last.tris, unfocused: S.unfocused }) }; S.last = S.turn; if (!S.virt) S.virt = S.virt0 = realNow(); S.useVirt = true; S.mode = 'measure'; });
 }
 
 // ---- 4. one build in one browser context: sign in, start a world, then wait for turns ----
@@ -218,7 +235,8 @@ async function startSession(browser, name, url, profile, quality, code, backendN
 }
 
 // ---- 5. one profile/backend: both builds alive, alternate turns ----
-async function playCombo(profileName, backendName, urls, codes) {
+async function playCombo(profileName, backendName, urls, codes, plan) {
+  const t0 = Date.now();
   const profile = PROFILES[profileName]; const backend = BACKENDS[backendName];
   const videoDir = mkdtempSync(join(tmpdir(), 'bt-video-')); temps.push(videoDir);
   const run = { profile: profileName, backend: backendName, viewport: profile.viewport, cpuSlowdown: profile.phone ? 4 : 1, touch: profile.phone, quality: profile.quality };
@@ -229,9 +247,20 @@ async function playCombo(profileName, backendName, urls, codes) {
       startSession(browser, 'old', urls.old, profile, profile.quality, codes.old, backendName, videoDir),
       startSession(browser, 'new', urls.new, profile, profile.quality, codes.new, backendName, videoDir)]);
     run.gpu = n.gpu; run.seeds = { old: o.seed, new: n.seed };
+    // Honest label: the game only has a WebGL renderer. "webgpu" means Chrome's WebGPU/Vulkan stack on the Intel GPU (the adapter is checked
+    // above), with the game drawing through WebGL2 on ANGLE over Vulkan; "webgl2" is ANGLE over OpenGL ES. There is no WebGPU draw path to test.
+    run.gameApi = n.gpu.gameContext; run.gpuPath = backendName === 'webgpu' ? 'Vulkan (ANGLE)' : 'OpenGL ES (ANGLE)';
+    if (!new RegExp(backendName === 'webgpu' ? 'vulkan' : 'opengl', 'i').test(n.gpu.gameRenderer ?? '')) throw new Error(`the ${backendName} profile did not get its graphics path (${run.gpuPath}): the game's renderer is ${n.gpu.gameRenderer}`);
     const turns = { old: [], new: [] };
-    const guard = (s, ms) => Promise.race([s.p.evaluate(f => window.__PT.runTurn(f), FRAMES), sleep(ms).then(() => { throw new Error(`${s.name} build: a ${FRAMES}-frame turn took more than ${ms / 1000} s`); })]);
-    for (let r = 0; r < ROUNDS; r++) for (const s of [o, n]) turns[s.name].push(await guard(s, 60000)); // old, new, old, new ...
+    // Run length does not depend on host load: this run's share of the time left (minus the setup the later runs still need) sets how many
+    // rounds it plays, from MIN_ROUNDS up to ROUNDS. A turn is only cut off at the hard limit, never for being slow.
+    const setupMs = Date.now() - t0;
+    const share = Math.max(20_000, (T0 + MAX_MS - Date.now() - (plan.left - 1) * Math.max(setupMs, plan.setupMs)) / plan.left);
+    const stopAt = Date.now() + share; const hardAt = T0 + MAX_MS + 30_000;
+    const guard = s => { const ms = Math.max(5000, hardAt - Date.now()); return Promise.race([s.p.evaluate(f => window.__PT.runTurn(f), FRAMES), sleep(ms).then(() => { throw new Error(`${s.name} build: the run's time limit passed (${Math.round(MAX_MS / 1000)} s) before a ${FRAMES}-frame turn ended`); })]); };
+    let rounds = 0;
+    for (; rounds < ROUNDS && (rounds < MIN_ROUNDS || Date.now() < stopAt); rounds++) for (const s of [o, n]) turns[s.name].push(await guard(s)); // old, new, old, new ...
+    run.setupMs = setupMs;
     // Both builds run the same scripted frames, so frame k of OLD and frame k of NEW do the same work. Host preemption only adds
     // time, and short alternating turns give both builds the same load; the median over every frame drops the spikes.
     const side = t => ({
@@ -240,7 +269,8 @@ async function playCombo(profileName, backendName, urls, codes) {
     });
     const so = side(turns.old), sn = side(turns.new);
     run.work = { old: { calls: so.calls, triangles: so.triangles }, new: { calls: sn.calls, triangles: sn.triangles } };
-    run.race = { oldMs: round(so.ms, 3), newMs: round(sn.ms, 3), rounds: ROUNDS, framesPerTurn: FRAMES, oldP25Ms: round(so.p25, 3), newP25Ms: round(sn.p25, 3),
+    run.race = { oldMs: round(so.ms, 3), newMs: round(sn.ms, 3), rounds, framesPerTurn: FRAMES,
+      turnCalls: { old: turns.old.map(x => mean(x.calls)), new: turns.new.map(x => mean(x.calls)) }, oldP25Ms: round(so.p25, 3), newP25Ms: round(sn.p25, 3),
       turnMs: { old: turns.old.map(x => round(median(x.ms), 2)), new: turns.new.map(x => round(median(x.ms), 2)) },
       pairRatioP50: round(median(turns.old.map((x, i) => median(x.ms.map((m, k) => turns.new[i].ms[k] / m)))), 3) };
     run.unfocusedFrames = (await o.p.evaluate(() => window.__PT.unfocused)) + (await n.p.evaluate(() => window.__PT.unfocused));
@@ -278,17 +308,19 @@ try {
   console.log(`Building OLD (${OLD_REF}) and NEW (working tree) against the local database…`);
   const oldTree = exportOld();
   const [oldDist, newDist] = await Promise.all([build(oldTree), build(ROOT)]);
-  await serve(newDist, 4173); await serve(oldDist, 4174);
-  const urls = { new: 'http://127.0.0.1:4173', old: 'http://127.0.0.1:4174' };
+  const urls = { new: await serve(newDist), old: await serve(oldDist) };
   const codes = await sameSeedCodes();
   rmSync(RESULTS, { recursive: true, force: true });
   const runs = [];
-  for (const profile of Object.keys(PROFILES)) for (const backend of Object.keys(BACKENDS)) {
-    if (env.PLAYTEST_ONLY && env.PLAYTEST_ONLY !== `${profile}/${backend}`) continue; // dev filter, e.g. phone/webgl2
+  const combos = Object.keys(PROFILES).flatMap(p => Object.keys(BACKENDS).map(b => [p, b])).filter(([p, b]) => !env.PLAYTEST_ONLY || env.PLAYTEST_ONLY === `${p}/${b}`); // filter is for dev, e.g. phone/webgl2
+  let setupMs = 40_000; // guess until the first run has measured its own setup
+  console.log('  note: the game has only a WebGL renderer. "webgpu" = Chrome WebGPU/Vulkan stack on the Intel GPU, game drawn through WebGL2 over Vulkan; "webgl2" = WebGL2 over OpenGL ES.');
+  for (const [profile, backend] of combos) {
     const t0 = Date.now();
-    const run = await playCombo(profile, backend, urls, codes);
+    const run = await playCombo(profile, backend, urls, codes, { left: combos.length - runs.length, setupMs });
+    if (run.setupMs) setupMs = Math.max(setupMs, run.setupMs);
     runs.push(run);
-    console.log(run.failed ? `  ${profile}/${backend} FAILED: ${run.failed}` : `  ${profile}/${backend} (${Math.round((Date.now() - t0) / 1000)} s): draw calls ${run.work.old.calls}/${run.work.new.calls}, triangles ${run.work.old.triangles}/${run.work.new.triangles}, frame work ${run.race.oldMs}/${run.race.newMs} ms (old/new)`);
+    console.log(run.failed ? `  ${profile}/${backend} FAILED: ${run.failed}` : `  ${profile}/${backend} (${Math.round((Date.now() - t0) / 1000)} s): draw calls ${run.work.old.calls}/${run.work.new.calls}, triangles ${run.work.old.triangles}/${run.work.new.triangles}, frame work ${run.race.oldMs}/${run.race.newMs} ms (old/new), ${run.race.rounds} rounds`);
   }
   mkdirSync(RESULTS, { recursive: true });
   writeFileSync(`${RESULTS}/latest.json`, JSON.stringify({ createdAt: new Date().toISOString(), oldRef: OLD_REF, runs }, null, 2));
@@ -302,11 +334,11 @@ try {
       if (b > a * (1 + BUDGET)) problems.push(`${key}: ${label} ${a} -> ${b} (+${pct(a, b)}%)`);
     if (r.race.newMs > r.race.oldMs * (1 + BUDGET)) problems.push(`${key}: frame work ${r.race.oldMs} ms -> ${r.race.newMs} ms (+${pct(r.race.oldMs, r.race.newMs)}%)`);
   }
-  if (problems.length) { console.error(problems.join('\n')); console.error('PLAYTEST FAILED'); exitCode = 1; }
-  else console.log('PLAYTEST PASSED');
+  if (problems.length) { console.error(problems.join('\n')); verdict(false); exitCode = 1; }
+  else verdict(true);
 } catch (error) {
   console.error(`playtest: ${error.message}`);
-  console.error('PLAYTEST FAILED');
+  verdict(false);
   exitCode = 1;
 } finally {
   await cleanup();
