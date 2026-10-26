@@ -34,7 +34,8 @@ const ICD = env.PLAYTEST_VK_ICD || '/usr/share/vulkan/icd.d/intel_icd.json';
 const SOFTWARE = /swiftshader|llvmpipe|software|softpipe/i;
 const BUDGET = 0.10; // NEW fails when work per frame or frame work time is more than 10% over OLD
 const ROUNDS = Math.max(2, Number(env.PLAYTEST_ROUNDS) || 90); // most turns per build; each turn is FRAMES scripted frames
-const MIN_ROUNDS = Math.min(ROUNDS, 12); // fewest turns per build, kept even when the host is so busy that the run's time is used up
+const WORK_TURNS = Math.max(1, Math.round(360 / FRAMES)); // the scripted route repeats every 360 frames: the work count is the mean over exactly one route, so it does not depend on how many rounds fit
+const MIN_ROUNDS = Math.min(ROUNDS, WORK_TURNS); // fewest turns per build (one whole route), kept even when the host is so busy that the run's time is used up
 const MAX_MS = Number(env.PLAYTEST_MAX_MS) || 540_000; // soft limit for the whole run; the hard limit is MAX_MS + 30 s (the check allows 10 min)
 const T0 = Date.now();
 const FRAMES = Math.max(5, Number(env.PLAYTEST_FRAMES) || 15); // short turns: host load drifts, so old and new must meet it within a few frames of each other
@@ -265,7 +266,7 @@ async function playCombo(profileName, backendName, urls, codes, plan) {
     // Both builds run the same scripted frames, so frame k of OLD and frame k of NEW do the same work. Host preemption only adds
     // time, and short alternating turns give both builds the same load; the median over every frame drops the spikes.
     const side = t => ({
-      calls: mean(t.flatMap(x => x.calls)), triangles: mean(t.flatMap(x => x.tris)), frames: t.reduce((a, x) => a + x.ms.length, 0),
+      calls: mean(t.slice(0, WORK_TURNS).flatMap(x => x.calls)), triangles: mean(t.slice(0, WORK_TURNS).flatMap(x => x.tris)), frames: t.reduce((a, x) => a + x.ms.length, 0),
       ms: median(t.flatMap(x => x.ms)), p25: quantile(t.flatMap(x => x.ms), 0.25),
     });
     const so = side(turns.old), sn = side(turns.new);
