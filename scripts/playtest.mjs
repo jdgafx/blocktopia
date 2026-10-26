@@ -131,7 +131,9 @@ function pageHarness({ code, quality, seed }) {
   HTMLCanvasElement.prototype.getContext = function (type, ...rest) { const c = getContext.call(this, type, ...rest); if (c && this.id === 'canvas' && !window.__game) window.__game = { type, c }; return c; };
   const STEP = 1000 / 60;
   const S = window.__PT = { mode: 'free', virt: 0, useVirt: false, n: 0, stable: 0, sig: '', lastT: -1, waited: 0, unfocused: 0, turn: null, held: new Set() };
-  performance.now = () => (S.useVirt ? S.virt : realNow());
+  // The first read in a frame is exactly the virtual time (the sim's dt stays identical on every run); later reads in the same frame add the
+  // real time elapsed, so a loop that waits on performance.now() (a slow build) still ends.
+  performance.now = () => { if (!S.useVirt) return realNow(); if (S.first) { S.first = false; S.vr = realNow(); return S.virt; } return S.virt + realNow() - S.vr; };
   const rng = s => () => { s = (s + 0x6D2B79F5) | 0; let t = Math.imul(s ^ (s >>> 15), 1 | s); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
   const canvas = () => document.getElementById('canvas');
   const key = (type, code) => document.dispatchEvent(new KeyboardEvent(type, { code, bubbles: true }));
@@ -172,7 +174,7 @@ function pageHarness({ code, quality, seed }) {
   window.requestAnimationFrame = cb => realRAF(function tick(t) {
     if (S.mode === 'free') return cb(t);
     if (S.mode === 'paused' || !diag()) return void realRAF(tick); // not this build's turn: skip the game's callback, keep its loop alive
-    if (t !== S.lastT) { S.lastT = t; S.settled = frameStart(); }
+    if (t !== S.lastT) { S.lastT = t; S.first = true; S.settled = frameStart(); }
     if (S.turn && S.turn.ms.length >= S.turn.want) { S.turn.done?.(); S.turn = null; S.mode = 'paused'; S.useVirt = false; return void realRAF(tick); }
     run(cb, t, S.settled);
   });
@@ -229,7 +231,7 @@ async function playCombo(profileName, backendName, urls, codes) {
     run.gpu = n.gpu; run.seeds = { old: o.seed, new: n.seed };
     const turns = { old: [], new: [] };
     const guard = (s, ms) => Promise.race([s.p.evaluate(f => window.__PT.runTurn(f), FRAMES), sleep(ms).then(() => { throw new Error(`${s.name} build: a ${FRAMES}-frame turn took more than ${ms / 1000} s`); })]);
-    for (let r = 0; r < ROUNDS; r++) for (const s of [o, n]) turns[s.name].push(await guard(s, 240000)); // old, new, old, new ...
+    for (let r = 0; r < ROUNDS; r++) for (const s of [o, n]) turns[s.name].push(await guard(s, 60000)); // old, new, old, new ...
     // Both builds run the same scripted frames, so frame k of OLD and frame k of NEW do the same work. Host preemption only adds
     // time, and short alternating turns give both builds the same load; the median over every frame drops the spikes.
     const side = t => ({
@@ -239,6 +241,7 @@ async function playCombo(profileName, backendName, urls, codes) {
     const so = side(turns.old), sn = side(turns.new);
     run.work = { old: { calls: so.calls, triangles: so.triangles }, new: { calls: sn.calls, triangles: sn.triangles } };
     run.race = { oldMs: round(so.ms, 3), newMs: round(sn.ms, 3), rounds: ROUNDS, framesPerTurn: FRAMES, oldP25Ms: round(so.p25, 3), newP25Ms: round(sn.p25, 3),
+      turnMs: { old: turns.old.map(x => round(median(x.ms), 2)), new: turns.new.map(x => round(median(x.ms), 2)) },
       pairRatioP50: round(median(turns.old.map((x, i) => median(x.ms.map((m, k) => turns.new[i].ms[k] / m)))), 3) };
     run.unfocusedFrames = (await o.p.evaluate(() => window.__PT.unfocused)) + (await n.p.evaluate(() => window.__PT.unfocused));
     run.errors = [...o.errors, ...n.errors];
