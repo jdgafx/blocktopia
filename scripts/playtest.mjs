@@ -280,7 +280,9 @@ async function playCombo(profileName, backendName, urls, codes, plan) {
     mkdirSync(`${RESULTS}/videos`, { recursive: true });
     await Promise.all([o, n].map(s => s.ctx.close()));
     run.video = `${RESULTS}/videos/${profileName}-${backendName}.webm`;
-    await n.video.saveAs(run.video); await o.video.saveAs(`${RESULTS}/videos/${profileName}-${backendName}-old.webm`); // copies; /tmp and the project can be different disks
+    // Videos are evidence, not the verdict: a copy that fails (full disk, quota) is recorded and does not fail a good build.
+    try { await n.video.saveAs(run.video); await o.video.saveAs(`${RESULTS}/videos/${profileName}-${backendName}-old.webm`); } // copies; /tmp and the project can be different disks
+    catch (error) { run.videoError = String(error.message || error).split('\n')[0].slice(0, 200); run.video = null; }
   } catch (error) {
     run.failed = String(error.message || error).split('\n')[0].slice(0, 300);
   } finally {
@@ -322,7 +324,7 @@ try {
     const run = await playCombo(profile, backend, urls, codes, { left: combos.length - runs.length, setupMs });
     if (run.setupMs) setupMs = Math.max(setupMs, run.setupMs);
     runs.push(run);
-    console.log(run.failed ? `  ${profile}/${backend} FAILED: ${run.failed}` : `  ${profile}/${backend} (${Math.round((Date.now() - t0) / 1000)} s): draw calls ${run.work.old.calls}/${run.work.new.calls}, triangles ${run.work.old.triangles}/${run.work.new.triangles}, frame work ${run.race.oldMs}/${run.race.newMs} ms (old/new), ${run.race.rounds} rounds`);
+    console.log(run.failed ? `  ${profile}/${backend} FAILED: ${run.failed}` : `  ${profile}/${backend} (${Math.round((Date.now() - t0) / 1000)} s): draw calls ${run.work.old.calls}/${run.work.new.calls}, triangles ${run.work.old.triangles}/${run.work.new.triangles}, frame work ${run.race.oldMs}/${run.race.newMs} ms (old/new), ${run.race.rounds} rounds${run.videoError ? ` (video not saved: ${run.videoError})` : ''}`);
   }
   mkdirSync(RESULTS, { recursive: true });
   writeFileSync(`${RESULTS}/latest.json`, JSON.stringify({ createdAt: new Date().toISOString(), oldRef: OLD_REF, runs }, null, 2));
