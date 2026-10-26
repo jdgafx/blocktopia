@@ -1,4 +1,4 @@
-import { spawn, execFileSync } from 'node:child_process';
+import { spawn, spawnSync, execFileSync } from 'node:child_process';
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
@@ -22,11 +22,24 @@ function migrateLocal() {
   }
   throw new Error('Too many migration repairs');
 }
+// Each statement runs in its own savepoint (ON_ERROR_ROLLBACK), so one "already exists" does not hide the rest.
+// Proof needed: at least one error, every error is "already exists". A statement that succeeds is an object a half-applied
+// migration is missing; the migration is then applied for real so the later objects exist before it is recorded.
 function collides(version) {
   const file = readdirSync('supabase/migrations').find(f => f.startsWith(`${version}_`));
-  const sql = `begin;\n${readFileSync(`supabase/migrations/${file}`, 'utf8')}\nrollback;`;
-  try { run('docker', ['exec', '-i', `supabase_db_${projectId()}`, 'psql', '-U', 'postgres', '-v', 'ON_ERROR_STOP=1', '-q'], { input: sql, stdio: ['pipe', 'pipe', 'pipe'] }); return false; }
-  catch (error) { return /already exists/.test(String(error.stderr)); }
+  const body = readFileSync(`supabase/migrations/${file}`, 'utf8');
+  const psql = end => {
+    const r = spawnSync('docker', ['exec', '-i', `supabase_db_${projectId()}`, 'psql', '-U', 'postgres', '-v', 'ON_ERROR_ROLLBACK=on'],
+      { input: `begin;\n${body}\n${end};`, encoding: 'utf8' });
+    const errors = (r.stderr.match(/ERROR:.*/g) || []);
+    const done = r.stdout.split('\n').filter(l => /^(CREATE|ALTER|DROP|GRANT|REVOKE|COMMENT|INSERT|UPDATE|DELETE|DO)\b/.test(l));
+    return { errors, done };
+  };
+  const { errors, done } = psql('rollback');
+  if (!errors.length || errors.some(e => !/already exists/.test(e))) return false;
+  if (done.some(l => /^(INSERT|UPDATE|DELETE)/.test(l))) return false; // never replay data statements automatically
+  if (done.length) { console.log(`Migration ${version} was half applied; applying its ${done.length} missing statement(s).`); psql('commit'); }
+  return true;
 }
 const projectId = () => readFileSync('supabase/config.toml', 'utf8').match(/^project_id\s*=\s*"([^"]+)"/m)[1];
 function backupLocalRows() {
