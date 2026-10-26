@@ -1,23 +1,42 @@
-// Local-only playtest: builds the game, serves it, plays a fixed route on laptop and phone profiles
-// over real Intel WebGPU and forced WebGL2, writes playtest-results/latest.json, compares to a baseline.
-// Usage: npm run playtest [-- --save-baseline]
-import { chromium } from 'playwright-core';
-import { execFileSync } from 'node:child_process';
+// Local-only speed check: builds OLD (git ref PLAYTEST_OLD_REF, default feature/core-engine) and NEW (this working tree),
+// plays both on laptop and phone profiles over real Intel WebGPU and forced WebGL2, in turns (old, new, old, new ...).
+// - Work per frame: renderer draw calls and triangles on a route scripted by frame number (virtual clock, seeded random,
+//   auto quality pinned), so the same code gives the same counts on any host load.
+// - Speed: time inside the game's frame callback, OLD vs NEW in the same run, so host load hits both alike.
+// Ends with exactly one line: PLAYTEST PASSED (exit 0) or PLAYTEST FAILED (exit 1). Usage: npm run playtest
+import { execFile, execFileSync } from 'node:child_process';
 import { createServer } from 'node:http';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { extname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
+import { dirname, extname, join, resolve } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { promisify } from 'node:util';
 
-process.chdir(fileURLToPath(new URL('..', import.meta.url)));
+const ROOT = fileURLToPath(new URL('..', import.meta.url));
+process.chdir(ROOT);
+// playwright-core: from this tree, else from the checkout this worktree belongs to (a temp copy of a commit has no node_modules of its own).
+const { chromium } = await (async () => {
+  const load = async spec => { const m = await import(spec); return m.chromium ? m : m.default; };
+  try { return await load('playwright-core'); } catch {}
+  const common = execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], { encoding: 'utf8' }).trim();
+  return load(pathToFileURL(createRequire(join(dirname(resolve(common)), 'x.js')).resolve('playwright-core')).href);
+})();
 const env = process.env;
-const PORT = 4173;
 const RESULTS = 'playtest-results';
-const BASELINE = env.PLAYTEST_BASELINE || 'tests/perf/baseline.json';
+const OLD_REF = env.PLAYTEST_OLD_REF || 'feature/core-engine';
 const ICD = env.PLAYTEST_VK_ICD || '/usr/share/vulkan/icd.d/intel_icd.json';
 const SOFTWARE = /swiftshader|llvmpipe|software|softpipe/i;
+const BUDGET = 0.10; // NEW fails when work per frame or frame work time is more than 10% over OLD
+const ROUNDS = Math.max(2, Number(env.PLAYTEST_ROUNDS) || 30); // turns per build; each turn is FRAMES scripted frames
+const FRAMES = Math.max(5, Number(env.PLAYTEST_FRAMES) || 15); // short turns: host load drifts, so old and new must meet it within a few frames of each other
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const die = msg => { console.error(`playtest: ${msg}`); process.exit(1); };
+const median = a => { const s = [...a].sort((x, y) => x - y); return s.length ? (s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2) : 0; };
+const mean = a => a.length ? Math.round(a.reduce((x, y) => x + y, 0) / a.length) : 0;
+const quantile = (a, q) => { const s = [...a].sort((x, y) => x - y); return s.length ? s[Math.min(s.length - 1, Math.floor(q * s.length))] : 0; };
+const round = (v, d = 2) => +v.toFixed(d);
+const pct = (a, b) => Math.round((b / a - 1) * 100);
 
 // ---- 1. local only: refuse before anything else starts ----
 for (const [name, value] of [['PLAYTEST_URL', env.PLAYTEST_URL], ['VITE_SUPABASE_URL', env.VITE_SUPABASE_URL]]) {
@@ -27,18 +46,16 @@ for (const [name, value] of [['PLAYTEST_URL', env.PLAYTEST_URL], ['VITE_SUPABASE
   if (!['127.0.0.1', 'localhost', '[::1]', '::1'].includes(host)) die(`${name}=${value} is not local. The playtest runs on local addresses only (127.0.0.1 or localhost).`);
 }
 const PROFILES = {
-  laptop: { viewport: { width: 1280, height: 720 }, phone: false },
-  phone: { viewport: { width: 390, height: 844 }, phone: true },
+  laptop: { viewport: { width: 1280, height: 720 }, phone: false, quality: 'balanced' },
+  phone: { viewport: { width: 390, height: 844 }, phone: true, quality: 'low' },
 };
 const BACKENDS = {
   webgpu: { args: ['--enable-features=Vulkan', '--enable-unsafe-webgpu', '--use-angle=vulkan'], env: { VK_ICD_FILENAMES: ICD } },
   webgl2: { args: ['--disable-features=Vulkan', '--use-angle=gl'], env: {} },
 };
-const savingBaseline = process.argv.includes('--save-baseline');
-if (!savingBaseline && !existsSync(BASELINE)) die(`baseline ${BASELINE} not found. Create one with: npm run playtest -- --save-baseline`);
 if (!existsSync(ICD)) die(`Intel Vulkan driver file ${ICD} not found (set PLAYTEST_VK_ICD).`);
 
-// ---- 2. chrome, local database, build, static server ----
+// ---- 2. chrome, local database, two builds, two static servers ----
 function findChrome() {
   for (const c of [env.PLAYTEST_CHROME, 'google-chrome', 'google-chrome-stable', 'chromium', 'chromium-browser']) {
     if (!c) continue;
@@ -53,10 +70,11 @@ try {
 } catch { die('the local database is not running. Start it with: npm run play (then stop that, or leave it running).'); }
 const supabaseUrl = env.VITE_SUPABASE_URL || supa.API_URL;
 const supabaseKey = env.VITE_SUPABASE_PUBLISHABLE_KEY || supa.PUBLISHABLE_KEY || supa.ANON_KEY;
-const externalUrl = env.PLAYTEST_URL;
-const BASE = externalUrl || `http://127.0.0.1:${PORT}`;
-let server; let dist;
-function serve(root) {
+const EMAIL = 'playtest-player@example.test';
+const PASSWORD = 'Playtest-Local-1!';
+const temps = []; const servers = [];
+
+function serve(root, port) {
   const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.webp': 'image/webp', '.png': 'image/png', '.jpg': 'image/jpeg', '.glb': 'model/gltf-binary', '.wasm': 'application/wasm' };
   const origin = new URL(supabaseUrl).origin;
   // Production CSP plus the local database address; built from the real header so it cannot drift.
@@ -70,15 +88,14 @@ function serve(root) {
         'Cross-Origin-Opener-Policy': 'same-origin', 'Cross-Origin-Embedder-Policy': 'require-corp', 'Content-Security-Policy': csp });
       res.end(body);
     });
-    s.once('error', reject).listen(PORT, '127.0.0.1', () => resolve(s));
+    s.once('error', reject).listen(port, '127.0.0.1', () => { servers.push(s); resolve(s); });
   });
 }
 async function cleanup() {
-  await new Promise(r => (server ? server.close(r) : r())).catch(() => {});
-  server?.closeAllConnections?.();
-  if (dist) rmSync(dist, { recursive: true, force: true });
+  await Promise.all(servers.map(s => new Promise(r => { s.close(r); s.closeAllConnections?.(); }))).catch(() => {});
+  for (const d of temps) rmSync(d, { recursive: true, force: true });
   // Every run adds rooms and saved worlds for the test player. Remove them (local container only; the account stays).
-  if (!externalUrl) try {
+  try {
     const id = readFileSync('supabase/config.toml', 'utf8').match(/^project_id\s*=\s*"([^"]+)"/m)[1];
     const who = `(select id from auth.users where email = '${EMAIL}')`;
     execFileSync('docker', ['exec', `supabase_db_${id}`, 'psql', '-U', 'postgres', '-q', '-c',
@@ -87,276 +104,206 @@ async function cleanup() {
 }
 for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => cleanup().finally(() => process.exit(130)));
 
-// ---- 3. one run: sign in, play the fixed route, collect numbers ----
-const pct = (a, q) => (a.length ? +[...a].sort((x, y) => x - y)[Math.min(a.length - 1, Math.floor(q * a.length))].toFixed(2) : null);
-const PASSWORD = 'Playtest-Local-1!';
-const EMAIL = 'playtest-player@example.test';
+// Build one tree (the working tree, or a plain export of OLD_REF) into its own temp dir.
+async function build(tree) {
+  const dist = mkdtempSync(join(tmpdir(), 'bt-dist-')); temps.push(dist);
+  await promisify(execFile)('npx', ['vite', 'build', '--outDir', dist, '--emptyOutDir'], { cwd: tree, env: { ...env, VITE_SUPABASE_URL: supabaseUrl, VITE_SUPABASE_PUBLISHABLE_KEY: supabaseKey } });
+  return dist;
+}
+function exportOld() {
+  try { execFileSync('git', ['rev-parse', '--verify', '--quiet', `${OLD_REF}^{commit}`], { stdio: 'ignore' }); } catch { die(`PLAYTEST_OLD_REF=${OLD_REF} is not a git commit or branch here.`); }
+  const dir = mkdtempSync(join(tmpdir(), 'bt-old-')); temps.push(dir);
+  execFileSync('sh', ['-c', `git archive "$0" | tar -x -C "$1"`, OLD_REF, dir]);
+  symlinkSync(realpathSync('node_modules'), join(dir, 'node_modules'));
+  return dir;
+}
 
-async function playRoute(profileName, backendName) {
-  const profile = PROFILES[profileName]; const backend = BACKENDS[backendName];
+// ---- 3. in the page: virtual clock, scripted route, per-frame counts and time ----
+// Runs before the game. The game's frame callback is timed with the real clock; its sim clock (performance.now) advances
+// exactly 1/60 s per scripted frame, and only on frames where terrain streaming has settled, so frame N is the same on every run.
+function pageHarness({ code, quality, seed }) {
+  const realNow = performance.now.bind(performance);
+  const realRAF = window.requestAnimationFrame.bind(window);
+  const crypt = crypto.getRandomValues.bind(crypto);
+  crypto.getRandomValues = a => (a instanceof Uint8Array && a.length === 6 ? (a.set(code), a) : crypt(a)); // fixed room => fixed world
+  try { localStorage.setItem('blocktopia-quality', quality); localStorage.setItem('blocktopia-mouse-mode', 'cursor'); } catch {} // auto quality pinned
+  const getContext = HTMLCanvasElement.prototype.getContext; // which context type the game's own canvas really got
+  HTMLCanvasElement.prototype.getContext = function (type, ...rest) { const c = getContext.call(this, type, ...rest); if (c && this.id === 'canvas' && !window.__game) window.__game = { type, c }; return c; };
+  const STEP = 1000 / 60;
+  const S = window.__PT = { mode: 'free', virt: 0, useVirt: false, n: 0, stable: 0, sig: '', lastT: -1, waited: 0, unfocused: 0, turn: null, held: new Set() };
+  performance.now = () => (S.useVirt ? S.virt : realNow());
+  const rng = s => () => { s = (s + 0x6D2B79F5) | 0; let t = Math.imul(s ^ (s >>> 15), 1 | s); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  const canvas = () => document.getElementById('canvas');
+  const key = (type, code) => document.dispatchEvent(new KeyboardEvent(type, { code, bubbles: true }));
+  const mouse = (type, button, target = canvas()) => target.dispatchEvent(new MouseEvent(type, { button, bubbles: true, cancelable: true }));
+  const look = (dx, dy) => document.dispatchEvent(new MouseEvent('mousemove', { movementX: dx, movementY: dy, bubbles: true }));
+  // The route, by scripted frame number n: hold right button to look, walk forward, sweep the view, jump, break one block, place one.
+  const CYCLE = 360;
+  function script(n) {
+    const f = n % CYCLE;
+    if (n === 0) mouse('mousedown', 2);
+    // walk out and back so the route stays on the loaded ground (a longer walk leaves it and the player falls into unloaded terrain)
+    if (f === 0) key('keydown', 'KeyW'); else if (f === 60) key('keyup', 'KeyW'); else if (f === 180) key('keydown', 'KeyS'); else if (f === 240) key('keyup', 'KeyS');
+    look(Math.round(7 * Math.sin(n / 40)), f === 100 ? 90 : f === 150 ? -90 : 0); // sweep; dip the view to the ground for the break and place
+    if (f % 120 === 30) key('keydown', 'Space'); else if (f % 120 === 33) key('keyup', 'Space');
+    if (f === 110) { mouse('mouseup', 2); mouse('mousedown', 0); } // break (left button held)
+    if (f === 140) { mouse('mouseup', 0); mouse('mousedown', 2); }  // back to look-drag
+    if (f === 155) { mouse('mouseup', 2); mouse('mousedown', 2); mouse('mouseup', 2); mouse('mousedown', 2); } // short right press places a block
+  }
+  const diag = () => window.__THREE_GAME_DIAGNOSTICS__;
+  function frameStart() { // once per animation frame, before the callbacks run
+    const d = diag(); if (!d) return false;
+    d.renderer.autoReset = false; // water renders more than once per frame: count them all, reset by hand
+    const w = d.world; const sig = `${w.chunks},${w.meshes}`;
+    if (w.pending === 0 && sig === S.sig) S.stable++; else { S.stable = 0; S.sig = sig; }
+    if (S.stable < 8 && S.waited++ < 1500) return false; // terrain still streaming: let the game run, freeze the clock
+    S.virt += STEP;
+    if (S.n === 0 || S.n % FRAMES_PER_TURN === 0) Math.random = rng(seed + S.n); // same random numbers in every build at the start of each turn
+    script(S.n++);
+    return true;
+  }
+  let FRAMES_PER_TURN = 90;
+  const run = (cb, t, measuring) => {
+    const info = diag().renderer;
+    if (!measuring) return void cb(t);
+    info.reset(); const t0 = realNow(); cb(t); const ms = realNow() - t0;
+    if (info.render.calls > 0 && S.turn && S.turn.ms.length < S.turn.want) { S.turn.ms.push(ms); S.turn.calls.push(info.render.calls); S.turn.tris.push(info.render.triangles); if (!document.hasFocus() || document.visibilityState !== 'visible') S.unfocused++; }
+  };
+  window.requestAnimationFrame = cb => realRAF(function tick(t) {
+    if (S.mode === 'free') return cb(t);
+    if (S.mode === 'paused' || !diag()) return void realRAF(tick); // not this build's turn: skip the game's callback, keep its loop alive
+    if (t !== S.lastT) { S.lastT = t; S.settled = frameStart(); }
+    if (S.turn && S.turn.ms.length >= S.turn.want) { S.turn.done?.(); S.turn = null; S.mode = 'paused'; S.useVirt = false; return void realRAF(tick); }
+    run(cb, t, S.settled);
+  });
+  S.runTurn = want => new Promise(done => { FRAMES_PER_TURN = want; S.turn = { want, ms: [], calls: [], tris: [], done: () => done({ ms: S.last.ms, calls: S.last.calls, tris: S.last.tris, unfocused: S.unfocused }) }; S.last = S.turn; if (!S.virt) S.virt = realNow(); S.useVirt = true; S.mode = 'measure'; });
+}
+
+// ---- 4. one build in one browser context: sign in, start a world, then wait for turns ----
+async function startSession(browser, name, url, profile, quality, code, backendName, videoDir) {
   const phone = profile.phone;
-  const videoDir = mkdtempSync(join(tmpdir(), 'bt-video-'));
+  const ctx = await browser.newContext({ viewport: profile.viewport, hasTouch: phone, isMobile: phone, deviceScaleFactor: phone ? 2 : 1, recordVideo: { dir: videoDir, size: profile.viewport } });
+  const p = await ctx.newPage();
+  const errors = [];
+  p.on('pageerror', e => errors.push(e.message.slice(0, 200)));
+  if (phone) await (await ctx.newCDPSession(p)).send('Emulation.setCPUThrottlingRate', { rate: 4 });
+  await p.addInitScript(pageHarness, { code, quality, seed: 1013 });
+  await p.goto(`${url}/?diagnostics`, { waitUntil: 'load' });
+  await p.waitForSelector('#account-form', { timeout: 60000 });
+  await p.fill('#account-email', EMAIL); await p.fill('#account-password', PASSWORD); await p.click('#account-submit');
+  if (!await p.waitForSelector('#room-lobby:not([hidden])', { timeout: 12000 }).catch(() => null)) {
+    await p.click('#account-switch'); await p.fill('#account-email', EMAIL); await p.fill('#account-password', PASSWORD); await p.click('#account-submit');
+    await p.waitForSelector('#room-lobby:not([hidden])', { timeout: 60000 });
+  }
+  await p.click('#create-room');
+  await p.waitForFunction(() => !document.getElementById('click-to-play').disabled, null, { timeout: 120000 });
+  if (phone) await p.tap('#click-to-play'); else await p.click('#click-to-play');
+  await p.waitForSelector('#play-gate', { state: 'hidden', timeout: 15000 }).catch(() => { throw new Error(`${name}: the play gate did not close: the game never started`); });
+  await p.waitForFunction(() => window.__THREE_GAME_DIAGNOSTICS__?.world?.position, null, { timeout: 60000 });
+  const gpu = await p.evaluate(async () => {
+    const g = window.__game; const gl = g?.type.startsWith('webgl') ? g.c : null; const ext = gl?.getExtension('WEBGL_debug_renderer_info');
+    let adapter = null;
+    try { const a = await navigator.gpu?.requestAdapter(); if (a) adapter = { ...(a.info ? { vendor: a.info.vendor, architecture: a.info.architecture, device: a.info.device, description: a.info.description } : {}), isFallbackAdapter: !!a.isFallbackAdapter }; } catch {}
+    return { adapter, gameContext: g?.type ?? null, gameRenderer: ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : null };
+  });
+  if (SOFTWARE.test(JSON.stringify(gpu)) || gpu.adapter?.isFallbackAdapter) throw new Error(`software GPU in use: ${JSON.stringify(gpu)}`);
+  if (backendName === 'webgpu' && !/intel/i.test(gpu.adapter?.vendor ?? '')) throw new Error(`WebGPU did not bind the Intel adapter: ${JSON.stringify(gpu)}`);
+  if (!gpu.gameContext) throw new Error('the game never created a rendering context on its canvas');
+  if (backendName === 'webgl2' && gpu.gameContext !== 'webgl2') throw new Error(`forced WebGL2 profile, but the game rendered with ${gpu.gameContext}`);
+  const seed = await p.evaluate(() => window.__THREE_GAME_DIAGNOSTICS__.world.seed);
+  await p.evaluate(() => { window.__PT.mode = 'paused'; }); // from here the page only runs during its own turn
+  return { name, ctx, p, gpu, seed, errors, video: p.video() };
+}
+
+// ---- 5. one profile/backend: both builds alive, alternate turns ----
+async function playCombo(profileName, backendName, urls, codes) {
+  const profile = PROFILES[profileName]; const backend = BACKENDS[backendName];
+  const videoDir = mkdtempSync(join(tmpdir(), 'bt-video-')); temps.push(videoDir);
+  const run = { profile: profileName, backend: backendName, viewport: profile.viewport, cpuSlowdown: profile.phone ? 4 : 1, touch: profile.phone, quality: profile.quality };
   const browser = await chromium.launch({ executablePath: chromePath, headless: true, env: { ...env, ...backend.env },
     args: ['--enable-gpu', '--ignore-gpu-blocklist', '--disable-backgrounding-occluded-windows', '--disable-renderer-backgrounding', '--disable-features=CalculateNativeWinOcclusion', ...backend.args] });
-  const run = { profile: profileName, backend: backendName, viewport: profile.viewport, cpuSlowdown: phone ? 4 : 1, touch: phone, errors: [], phases: {} };
   try {
-    const ctx = await browser.newContext({ viewport: profile.viewport, hasTouch: phone, isMobile: phone, deviceScaleFactor: phone ? 2 : 1, recordVideo: { dir: videoDir, size: profile.viewport } });
-    const p = await ctx.newPage();
-    const cdp = await ctx.newCDPSession(p);
-    if (phone) await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
-    p.on('pageerror', e => run.errors.push(e.message.slice(0, 200)));
-    await p.addInitScript(() => {
-      // Fixed room code => fixed world seed, so every run walks the same terrain.
-      const real = crypto.getRandomValues.bind(crypto);
-      crypto.getRandomValues = a => (a instanceof Uint8Array && a.length === 6 ? (a.set([3, 7, 11, 13, 17, 19]), a) : real(a));
-      // Remember which context type the game's own canvas really got (webgl2, webgl or webgpu).
-      const getContext = HTMLCanvasElement.prototype.getContext;
-      HTMLCanvasElement.prototype.getContext = function (type, ...rest) { const c = getContext.call(this, type, ...rest); if (c && this.id === 'canvas' && !window.__game) window.__game = { type, c }; return c; };
-      const S = window.__S = { unfocused: 0, dts: [], last: 0, arm: null, lat: [] };
-      const tick = t => {
-        if (!document.hasFocus() || document.visibilityState !== 'visible') { S.unfocused++; S.last = 0; } else if (S.last) S.dts.push(t - S.last);
-        S.last = t;
-        const w = window.__THREE_GAME_DIAGNOSTICS__?.world;
-        if (S.arm?.t0 && w) {
-          const d = Math.hypot(w.position[0] - S.arm.p[0], w.position[2] - S.arm.p[2]) + Math.abs(w.position[1] - S.arm.p[1]);
-          if (d > 0.02) { S.lat.push(performance.now() - S.arm.t0); S.arm = null; }
-        }
-        requestAnimationFrame(tick);
-      };
-      requestAnimationFrame(tick);
-      const mark = e => { if (S.arm && !S.arm.t0) S.arm.t0 = e.timeStamp; };
-      addEventListener('keydown', mark, true); addEventListener('touchstart', mark, true);
+    const [o, n] = await Promise.all([
+      startSession(browser, 'old', urls.old, profile, profile.quality, codes.old, backendName, videoDir),
+      startSession(browser, 'new', urls.new, profile, profile.quality, codes.new, backendName, videoDir)]);
+    run.gpu = n.gpu; run.seeds = { old: o.seed, new: n.seed };
+    const turns = { old: [], new: [] };
+    const guard = (s, ms) => Promise.race([s.p.evaluate(f => window.__PT.runTurn(f), FRAMES), sleep(ms).then(() => { throw new Error(`${s.name} build: a ${FRAMES}-frame turn took more than ${ms / 1000} s`); })]);
+    for (let r = 0; r < ROUNDS; r++) for (const s of [o, n]) turns[s.name].push(await guard(s, 240000)); // old, new, old, new ...
+    // Both builds run the same scripted frames, so frame k of OLD and frame k of NEW do the same work. Host preemption only adds
+    // time, and short alternating turns give both builds the same load; the median over every frame drops the spikes.
+    const side = t => ({
+      calls: mean(t.flatMap(x => x.calls)), triangles: mean(t.flatMap(x => x.tris)), frames: t.reduce((a, x) => a + x.ms.length, 0),
+      ms: median(t.flatMap(x => x.ms)), p25: quantile(t.flatMap(x => x.ms), 0.25),
     });
-
-    // ---- input helpers (keyboard + mouse on laptop; CDP touch on phone) ----
-    const live = new Map();
-    const tsend = type => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: [...live].map(([id, [x, y]]) => ({ x, y, id, radiusX: 8, radiusY: 8, force: 1 })) });
-    const tDown = (id, x, y) => { live.set(id, [x, y]); return tsend('touchStart'); };
-    const tMove = (id, x, y) => { live.set(id, [x, y]); return tsend('touchMove'); };
-    // touchEnd lists the points being released (not the ones that stay down), so a held joystick survives a look swipe
-    const tUp = id => { const [x, y] = live.get(id); live.delete(id); return cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [{ x, y, id, radiusX: 8, radiusY: 8, force: 1 }] }); };
-    const tTap = async (id, x, y) => { await tDown(id, x, y); await sleep(60); await tUp(id); };
-    const center = id => p.evaluate(i => { const b = document.getElementById(i).getBoundingClientRect(); return [b.left + b.width / 2, b.top + b.height / 2]; }, id);
-    const pos = () => p.evaluate(() => window.__THREE_GAME_DIAGNOSTICS__?.world?.position);
-    let joy = null;
-    const moveStart = async (fx = 0, fz = -1) => {
-      if (!phone) { for (const [k, on] of [['KeyW', fz < 0], ['KeyS', fz > 0], ['KeyA', fx < 0], ['KeyD', fx > 0]]) if (on) await p.keyboard.down(k); return; }
-      joy = await center('joystick-zone'); await tDown(1, ...joy); await tMove(1, joy[0] + fx * 38, joy[1] + fz * 38);
-    };
-    const moveStop = async () => { if (!phone) { for (const k of ['KeyW', 'KeyS', 'KeyA', 'KeyD']) await p.keyboard.up(k); } else if (joy) { await tUp(1); joy = null; } };
-    const walk = async (ms, fx = 0, fz = -1) => { await moveStart(fx, fz); await sleep(ms); await moveStop(); await sleep(150); };
-    const jump = async () => { if (!phone) { await p.keyboard.down('Space'); await sleep(80); await p.keyboard.up('Space'); } else await tTap(4, ...(await center('btn-jump'))); };
-    const PX_PER_RAD = phone ? 250 : 500;
-    let lookPt = null;
-    const look = async (dx, dy = 0) => {
-      if (!phone) { await p.evaluate(([x, y]) => { for (let i = 0; i < 6; i++) document.dispatchEvent(new MouseEvent('mousemove', { movementX: x / 6, movementY: y / 6, bubbles: true })); }, [dx, dy]); return; }
-      lookPt ||= await p.evaluate(() => { const ok = (x, y) => document.elementFromPoint(x, y)?.id === 'canvas'; for (const fy of [.55, .5, .6, .45, .65, .4]) for (const fx of [.5, .6, .45, .7, .8]) { const x = innerWidth * fx, y = innerHeight * fy; if ([[-60, -60], [60, 60], [-60, 60], [60, -60], [0, 0]].every(([dx, dy]) => ok(x + dx, y + dy))) return [x, y]; } return [innerWidth * .5, innerHeight * .55]; }); // a spot whose whole swipe stays on the canvas, clear of HUD buttons
-      const n = Math.max(1, Math.ceil(Math.max(Math.abs(dx), Math.abs(dy)) / 90));
-      for (let k = 0; k < n; k++) {
-        const sx = dx / n, sy = dy / n, x0 = lookPt[0] - sx / 2, y0 = lookPt[1] - sy / 2;
-        await tDown(7, x0, y0); for (let i = 1; i <= 4; i++) await tMove(7, x0 + sx * i / 4, y0 + sy * i / 4); await tUp(7);
-      }
-    };
-    const wrap = a => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; };
-    let yawSign = 1;
-    async function goto(tx, tz, maxMs, stopDist) {
-      let prev = await pos(); let lastErr = null; const t0 = Date.now(); let reached = false;
-      await moveStart();
-      while (Date.now() - t0 < maxMs) {
-        await sleep(500); const q = await pos();
-        if (Math.hypot(tx - q[0], tz - q[2]) < stopDist) { reached = true; break; }
-        const vx = q[0] - prev[0], vz = q[2] - prev[2]; prev = q;
-        if (Math.hypot(vx, vz) < 0.6) { await look((lastErr ?? 1) > 0 ? PX_PER_RAD : -PX_PER_RAD); await jump(); lastErr = null; continue; } // stuck: turn and hop
-        const e = wrap(Math.atan2(tz - q[2], tx - q[0]) - Math.atan2(vz, vx));
-        if (lastErr !== null && Math.abs(e) > Math.abs(lastErr) + 0.1) yawSign = -yawSign;
-        if (Math.abs(e) > 0.12) { await look(yawSign * e * PX_PER_RAD * 0.9); lastErr = e; } else lastErr = null;
-      }
-      await moveStop(); const q = await pos();
-      return { reached, distLeft: +Math.hypot(tx - q[0], tz - q[2]).toFixed(1) };
-    }
-    const phase = async (name, fn) => {
-      await p.evaluate(() => { __S.dts = []; __S.last = 0; });
-      const extra = (await fn()) || {};
-      const dts = await p.evaluate(() => __S.dts.splice(0));
-      run.phases[name] = { frames: dts.length, p50: pct(dts, .5), p95: pct(dts, .95), ...extra, world: await p.evaluate(() => { const w = __THREE_GAME_DIAGNOSTICS__.world; return { chunks: w.chunks, meshes: w.meshes, pending: w.pending }; }), at: (await pos()).map(v => +v.toFixed(1)) };
-      allFrames.push(...dts);
-    };
-    const allFrames = [];
-
-    // ---- sign in (create the local test player on first use) and start a world ----
-    await p.goto(`${BASE}/?diagnostics`, { waitUntil: 'load' });
-    await p.waitForSelector('#account-form', { timeout: 30000 });
-    await p.fill('#account-email', EMAIL); await p.fill('#account-password', PASSWORD); await p.click('#account-submit');
-    if (!await p.waitForSelector('#room-lobby:not([hidden])', { timeout: 8000 }).catch(() => null)) {
-      await p.click('#account-switch'); await p.fill('#account-email', EMAIL); await p.fill('#account-password', PASSWORD); await p.click('#account-submit');
-      await p.waitForSelector('#room-lobby:not([hidden])', { timeout: 30000 });
-    }
-    await p.click('#create-room');
-    await p.waitForFunction(() => !document.getElementById('click-to-play').disabled, null, { timeout: 120000 });
-    if (phone) await p.tap('#click-to-play'); else await p.click('#click-to-play');
-    // The gate must close, or every number below would measure the menu instead of the game.
-    await p.waitForSelector('#play-gate', { state: 'hidden', timeout: 10000 }).catch(() => { throw new Error('the play gate did not close: the game never started'); });
-    await p.waitForFunction(() => window.__THREE_GAME_DIAGNOSTICS__?.world?.position, null, { timeout: 30000 });
-    await sleep(4000); // let the first chunks mesh before measuring
-
-    // ---- GPU identity: fail instead of measuring a software renderer ----
-    run.gpu = await p.evaluate(async () => {
-      const g = window.__game; const gl = g?.type.startsWith('webgl') ? g.c : null; const ext = gl?.getExtension('WEBGL_debug_renderer_info');
-      let adapter = null;
-      try { const a = await navigator.gpu?.requestAdapter(); if (a) adapter = { ...(a.info ? { vendor: a.info.vendor, architecture: a.info.architecture, device: a.info.device, description: a.info.description } : {}), isFallbackAdapter: !!a.isFallbackAdapter }; } catch {}
-      return { adapter, gameContext: g?.type ?? null, gameRenderer: ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : null };
-    });
-    if (SOFTWARE.test(JSON.stringify(run.gpu)) || run.gpu.adapter?.isFallbackAdapter) throw new Error(`software GPU in use: ${JSON.stringify(run.gpu)}`);
-    if (backendName === 'webgpu' && !/intel/i.test(run.gpu.adapter?.vendor ?? '')) throw new Error(`WebGPU did not bind the Intel adapter: ${JSON.stringify(run.gpu)}`);
-    if (!run.gpu.gameContext) throw new Error('the game never created a rendering context on its canvas');
-    if (backendName === 'webgl2' && run.gpu.gameContext !== 'webgl2') throw new Error(`forced WebGL2 profile, but the game rendered with ${run.gpu.gameContext}`);
-
-    // ---- the fixed route: look, walk, break, place, water ----
-    await phase('look', async () => { await look(PX_PER_RAD); await sleep(300); await look(-PX_PER_RAD); await sleep(300); });
-    await phase('walk', async () => {
-      const lat = [];
-      for (let i = 0; i < 4; i++) {
-        const a = await pos(); await p.evaluate(a => { __S.arm = { p: a, t0: 0 }; __S.lat = []; }, a);
-        await moveStart(); await sleep(700); await moveStop(); lat.push(await p.evaluate(() => __S.lat[0] ?? null)); await sleep(300);
-      }
-      await walk(4000);
-      run.inputDelays = lat.filter(x => x != null);
-    });
-    const edits = () => p.evaluate(() => JSON.stringify(__THREE_GAME_DIAGNOSTICS__.world.edits));
-    // wait for terrain streaming to finish, or a break/place aims at a world that is not there yet
-    await p.waitForFunction(() => { const w = __THREE_GAME_DIAGNOSTICS__.world; return !w.pending; }, null, { timeout: 60000 }).catch(() => { run.note = 'terrain still streaming at break'; });
-    await look(0, PX_PER_RAD * .8); await sleep(300); // look down at the ground
-    await phase('break', async () => {
-      const before = await edits();
-      if (!phone) { await p.mouse.down(); await sleep(900); await p.mouse.up(); } else { const [x, y] = await center('btn-break'); await tDown(3, x, y); await sleep(900); await tUp(3); }
-      await sleep(400); return { changed: (await edits()) !== before };
-    });
-    await phase('place', async () => {
-      const before = await edits();
-      if (!phone) await p.mouse.click(profile.viewport.width / 2, profile.viewport.height / 2, { button: 'right' }); else await tTap(6, ...(await center('btn-place')));
-      await sleep(500); return { changed: (await edits()) !== before };
-    });
-    await look(0, -PX_PER_RAD * .8);
-    await phase('water', async () => {
-      const waters = await p.evaluate(() => window.__THREE_GAME_DIAGNOSTICS__.waters);
-      if (!waters?.length) return { reached: false, note: 'no water near spawn' };
-      return goto(waters[0][0], waters[0][2], 45000, 1.5);
-    });
-
-    const frames = await p.evaluate(() => ({ unfocused: __S.unfocused }));
-    run.unfocusedFrames = frames.unfocused;
-    run.frameMs = { p50: pct(allFrames, .5), p95: pct(allFrames, .95), p99: pct(allFrames, .99), mean: +(allFrames.reduce((a, b) => a + b, 0) / allFrames.length).toFixed(2) };
-    run.frames = allFrames.length;
-    run.inputDelayMs = pct(run.inputDelays, .5);
-    if (run.errors.length) run.note = 'page errors during the run';
-    const video = p.video();
-    await ctx.close();
+    const so = side(turns.old), sn = side(turns.new);
+    run.work = { old: { calls: so.calls, triangles: so.triangles }, new: { calls: sn.calls, triangles: sn.triangles } };
+    run.race = { oldMs: round(so.ms, 3), newMs: round(sn.ms, 3), rounds: ROUNDS, framesPerTurn: FRAMES, oldP25Ms: round(so.p25, 3), newP25Ms: round(sn.p25, 3),
+      pairRatioP50: round(median(turns.old.map((x, i) => median(x.ms.map((m, k) => turns.new[i].ms[k] / m)))), 3) };
+    run.unfocusedFrames = (await o.p.evaluate(() => window.__PT.unfocused)) + (await n.p.evaluate(() => window.__PT.unfocused));
+    run.errors = [...o.errors, ...n.errors];
     mkdirSync(`${RESULTS}/videos`, { recursive: true });
+    await Promise.all([o, n].map(s => s.ctx.close()));
     run.video = `${RESULTS}/videos/${profileName}-${backendName}.webm`;
-    await video.saveAs(run.video); // copies; /tmp and the project can be different disks
+    await n.video.saveAs(run.video); await o.video.saveAs(`${RESULTS}/videos/${profileName}-${backendName}-old.webm`); // copies; /tmp and the project can be different disks
   } catch (error) {
     run.failed = String(error.message || error).split('\n')[0].slice(0, 300);
   } finally {
     await browser.close().catch(() => {});
-    rmSync(videoDir, { recursive: true, force: true });
   }
   return run;
 }
 
-// ---- 4. main ----
-// The host is busy, so one run is noisy (the same code measured 23 to 56 ms mean). Run up to N attempts and keep, per number,
-// the best one: a real slowdown shows in every attempt, host load only in some. Compare mode stops once within budget.
-const ATTEMPTS = Math.max(1, Number(env.PLAYTEST_RUNS) || 3);
-const STEP = 1000 / 60; // frame times land on vsync steps, so p50/p95/p99 may move one step before they count as slower
-const limit = (k, b) => k === 'mean' ? b * 1.1 : Math.max(b * 1.1, b + STEP);
-const over = (r, b) => Object.keys(b.frameMs).filter(k => r.frameMs[k] > limit(k, b.frameMs[k]));
-// Other work on this laptop (headless browsers, ffmpeg) changes the phone profile's speed by 2x: its 4x-throttled JS is CPU bound.
-// So the host is measured before and during every attempt (CPU busy from /proc/stat, Intel GPU busy from the GPU's rc6 idle counter).
-// A busy host never produces a speed PASS or FAIL: the run stops with "host too busy to measure". Limits come from measurements, see the T-004 report.
-const RC6 = [0, 1, 2].map(n => `/sys/class/drm/card${n}/gt/gt0/rc6_residency_ms`).find(existsSync);
-const cpuNow = () => { const f = readFileSync('/proc/stat', 'utf8').split('\n')[0].split(/\s+/).slice(1).map(Number); return [f[3] + f[4], f.reduce((x, y) => x + y, 0)]; };
-const gpuNow = () => (RC6 ? Number(readFileSync(RC6, 'utf8')) : 0);
-function meter() {
-  const [i0, t0] = cpuNow(), g0 = gpuNow(), w0 = Date.now();
-  return () => { const [i1, t1] = cpuNow(); return { cpu: +(100 * (1 - (i1 - i0) / (t1 - t0))).toFixed(1), gpu: RC6 ? +Math.max(0, 100 * (1 - (gpuNow() - g0) / (Date.now() - w0))).toFixed(1) : 0 }; };
-}
-const HOST = { cpu: Number(env.PLAYTEST_CPU_MAX) || 15, gpu: Number(env.PLAYTEST_GPU_MAX) || 10, runCpu: Number(env.PLAYTEST_RUN_CPU_MAX) || 30, runGpu: Number(env.PLAYTEST_RUN_GPU_MAX) || 40 };
-const WAIT_MS = (Number(env.PLAYTEST_WAIT_MIN) || 1) * 60000; // one wait in total, before the first profile
-const BUSY_EXIT = 3; // every route was played and saved, but the host was too busy to judge speed
-const busyWords = (h, cpu, gpu) => [h.cpu > cpu && `CPU ${h.cpu}% busy (limit ${cpu}%)`, h.gpu > gpu && `Intel GPU ${h.gpu}% busy (limit ${gpu}%)`].filter(Boolean).join(', ');
-async function waitForQuietHost() {
-  const t0 = Date.now();
-  for (let said = false; ; said = true) {
-    const m = meter(); await sleep(10000); const why = busyWords(m(), HOST.cpu, HOST.gpu);
-    if (!why || Date.now() - t0 >= WAIT_MS) return;
-    if (!said) console.log(`  host busy (${why}); waiting up to ${Math.round(WAIT_MS / 1000)} s for it to calm down, then playing anyway`);
+// Two room codes that make the same world seed, so OLD and NEW walk the same terrain without being in the same room.
+async function sameSeedCodes() {
+  const { roomSeed, ROOM_ALPHABET } = await import(pathToFileURL(join(ROOT, 'src/network/protocol.js')));
+  const seen = new Map(); let s = 1;
+  for (let i = 0; i < 2_000_000; i++) {
+    s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
+    const bytes = [0, 1, 2, 3, 4, 5].map(k => ((s >>> (k * 5)) ^ (i >>> (k * 3))) & 31);
+    const seed = roomSeed(bytes.map(b => ROOM_ALPHABET[b]).join(''));
+    const other = seen.get(seed);
+    if (other && other.join() !== bytes.join()) return { old: other, new: bytes };
+    seen.set(seed, bytes);
   }
+  return { old: [3, 7, 11, 13, 17, 19], new: [3, 7, 11, 13, 17, 19] };
 }
-const clean = r => !r.failed && !r.unfocusedFrames && !r.busy;
-async function bestOf(profile, backend, b) {
-  const attempts = [];
-  let best = null;
-  for (let i = 1; i <= ATTEMPTS; i++) {
-    const m = meter();
-    const run = await playRoute(profile, backend);
-    run.host = m();
-    run.busy = busyWords(run.host, HOST.runCpu, HOST.runGpu);
-    attempts.push(run.failed ? { failed: run.failed, host: run.host } : { ...run.frameMs, unfocusedFrames: run.unfocusedFrames, host: run.host, busy: run.busy || undefined });
-    if (clean(run)) {
-      if (best && clean(best)) { for (const k of Object.keys(run.frameMs)) if (run.frameMs[k] < best.frameMs[k]) best.frameMs[k] = run.frameMs[k]; } else best = run;
-    } else if (!best) best = run; // keep a bad attempt only until a good one replaces it
-    if (run.busy) break; // a busy host stays busy for minutes: more attempts only cost time, and this one is not judged
-    if (clean(best) && !savingBaseline && b && !over(best, b).length) break;
-    if (i < ATTEMPTS) console.log(`  attempt ${i}: ${run.failed ? `failed (${run.failed})` : `mean ${run.frameMs.mean} ms`}; trying again`);
-  }
-  best.attempts = attempts;
-  return best;
-}
-let base = null;
-if (!savingBaseline) { try { base = JSON.parse(readFileSync(BASELINE, 'utf8')).runs; } catch (e) { die(`cannot read baseline ${BASELINE}: ${e.message}`); } }
+
+// ---- 6. main ----
 let exitCode = 0;
 try {
-  if (!externalUrl) {
-    console.log('Building the game against the local database…');
-    dist = mkdtempSync(join(tmpdir(), 'bt-dist-'));
-    execFileSync('npx', ['vite', 'build', '--outDir', dist, '--emptyOutDir'], { stdio: 'ignore', env: { ...env, VITE_SUPABASE_URL: supabaseUrl, VITE_SUPABASE_PUBLISHABLE_KEY: supabaseKey } });
-    server = await serve(dist);
-  }
+  console.log(`Building OLD (${OLD_REF}) and NEW (working tree) against the local database…`);
+  const oldTree = exportOld();
+  const [oldDist, newDist] = await Promise.all([build(oldTree), build(ROOT)]);
+  await serve(newDist, 4173); await serve(oldDist, 4174);
+  const urls = { new: 'http://127.0.0.1:4173', old: 'http://127.0.0.1:4174' };
+  const codes = await sameSeedCodes();
   rmSync(RESULTS, { recursive: true, force: true });
-  await waitForQuietHost();
   const runs = [];
   for (const profile of Object.keys(PROFILES)) for (const backend of Object.keys(BACKENDS)) {
     if (env.PLAYTEST_ONLY && env.PLAYTEST_ONLY !== `${profile}/${backend}`) continue; // dev filter, e.g. phone/webgl2
-    console.log(`Playing ${profile} on ${backend}…`);
-    const run = await bestOf(profile, backend, base?.find(x => x.profile === profile && x.backend === backend));
+    const t0 = Date.now();
+    const run = await playCombo(profile, backend, urls, codes);
     runs.push(run);
-    console.log(run.failed ? `  FAILED: ${run.failed}` : `${run.busy ? '  (host busy, not judged) ' : ''}  frame ms p50 ${run.frameMs.p50} p95 ${run.frameMs.p95} p99 ${run.frameMs.p99}, input delay ${run.inputDelayMs} ms, GPU ${run.gpu.adapter?.vendor ?? run.gpu.gameRenderer}, game context ${run.gpu.gameContext}`);
+    console.log(run.failed ? `  ${profile}/${backend} FAILED: ${run.failed}` : `  ${profile}/${backend} (${Math.round((Date.now() - t0) / 1000)} s): draw calls ${run.work.old.calls}/${run.work.new.calls}, triangles ${run.work.old.triangles}/${run.work.new.triangles}, frame work ${run.race.oldMs}/${run.race.newMs} ms (old/new)`);
   }
   mkdirSync(RESULTS, { recursive: true });
-  writeFileSync(`${RESULTS}/latest.json`, JSON.stringify({ createdAt: new Date().toISOString(), runs }, null, 2));
-  const problems = runs.filter(r => r.failed).map(r => `${r.profile}/${r.backend}: run failed: ${r.failed}`);
-  problems.push(...runs.filter(r => !r.failed && r.unfocusedFrames > 0).map(r => `${r.profile}/${r.backend}: ${r.unfocusedFrames} unfocused frames, numbers are not trustworthy`));
-  const busy = runs.filter(r => !r.failed && r.busy);
-  const busyLine = busy.length && `host busy: ${busy.map(r => `${r.profile}/${r.backend} ${r.busy}`).join('; ')}, speed not judged`;
-  if (savingBaseline) {
-    if (busyLine) die(`not saving a baseline from a busy host. ${busyLine}`);
-    if (problems.length) die(`not saving a baseline from a bad run:\n${problems.join('\n')}`);
-    mkdirSync('tests/perf', { recursive: true });
-    writeFileSync(BASELINE, JSON.stringify({ createdAt: new Date().toISOString(), attempts: ATTEMPTS, runs: runs.map(({ profile, backend, frameMs, gpu }) => ({ profile, backend, gameContext: gpu.gameContext, frameMs })) }, null, 2));
-    console.log(`Baseline saved to ${BASELINE}`);
-  } else {
-    for (const r of runs.filter(x => !x.failed && !x.busy)) { // a busy host's numbers are saved, never judged
-      const b = base.find(x => x.profile === r.profile && x.backend === r.backend);
-      if (!b) { problems.push(`${r.profile}/${r.backend}: no baseline entry`); continue; }
-      if (b.gameContext && r.gpu.gameContext !== b.gameContext) problems.push(`${r.profile}/${r.backend}: the game rendered with ${r.gpu.gameContext}, the baseline was ${b.gameContext}`);
-      for (const k of over(r, b)) problems.push(`${r.profile}/${r.backend}: frame time ${k} ${r.frameMs[k]} ms is ${Math.round((r.frameMs[k] / b.frameMs[k] - 1) * 100)}% over baseline ${b.frameMs[k]} ms (limit ${k === 'mean' ? '10%' : '10% or one 16.7 ms frame step'}, best of ${r.attempts.length}, host CPU busy during attempts ${r.attempts.map(a => a.host.cpu).join('/')}%)`);
-    }
+  writeFileSync(`${RESULTS}/latest.json`, JSON.stringify({ createdAt: new Date().toISOString(), oldRef: OLD_REF, runs }, null, 2));
+  const problems = [];
+  for (const r of runs) {
+    const key = `${r.profile}/${r.backend}`;
+    if (r.failed) { problems.push(`${key}: run failed: ${r.failed}`); continue; }
+    if (r.unfocusedFrames > 0) problems.push(`${key}: ${r.unfocusedFrames} unfocused frames, numbers are not trustworthy`);
+    if (r.seeds.old !== r.seeds.new) console.log(`  note: ${key} OLD and NEW built different worlds (seed ${r.seeds.old} vs ${r.seeds.new}); work counts compare different terrain`);
+    for (const [label, a, b] of [['draw calls per frame', r.work.old.calls, r.work.new.calls], ['triangles per frame', r.work.old.triangles, r.work.new.triangles]])
+      if (b > a * (1 + BUDGET)) problems.push(`${key}: ${label} ${a} -> ${b} (+${pct(a, b)}%)`);
+    if (r.race.newMs > r.race.oldMs * (1 + BUDGET)) problems.push(`${key}: frame work ${r.race.oldMs} ms -> ${r.race.newMs} ms (+${pct(r.race.oldMs, r.race.newMs)}%)`);
   }
-  if (problems.length) { console.error(`PLAYTEST FAILED\n${problems.join('\n')}${busyLine ? `\n${busyLine}` : ''}`); exitCode = 1; }
-  else if (busyLine) { console.error(`PLAYTEST NOT JUDGED (exit ${BUSY_EXIT})\n${busyLine}\nNumbers and videos are in ${RESULTS}. Run again on a quiet host for the speed verdict.`); exitCode = BUSY_EXIT; }
-  else console.log('PLAYTEST PASSED: every profile within 10% of the baseline.');
+  if (problems.length) { console.error(problems.join('\n')); console.error('PLAYTEST FAILED'); exitCode = 1; }
+  else console.log('PLAYTEST PASSED');
 } catch (error) {
   console.error(`playtest: ${error.message}`);
+  console.error('PLAYTEST FAILED');
   exitCode = 1;
 } finally {
   await cleanup();

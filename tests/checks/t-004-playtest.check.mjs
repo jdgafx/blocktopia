@@ -33,36 +33,7 @@ test('1. npm run play starts on the existing local database, keeps every row, an
   for (const v of files) assert.ok(applied.includes(v), `migration ${v} is not recorded as applied`);
 });
 
-test('2. npm run playtest measures laptop and phone on real Intel WebGPU and forced WebGL2, then stops its servers', { timeout: 1_800_000 }, async () => {
-  const r = spawnSync('npm', ['run', 'playtest'], { cwd: ROOT, encoding: 'utf8', timeout: 1_700_000 });
-  assert.equal(r.status, 0, `npm run playtest failed:\n${(r.stdout + r.stderr).slice(-2000)}`);
-  const file = join(ROOT, 'playtest-results/latest.json');
-  assert.ok(existsSync(file), 'playtest-results/latest.json missing');
-  const { runs } = JSON.parse(readFileSync(file, 'utf8'));
-  for (const profile of ['laptop', 'phone']) for (const backend of ['webgpu', 'webgl2']) {
-    const run = runs.find(x => x.profile === profile && x.backend === backend);
-    assert.ok(run, `no run for ${profile}/${backend}`);
-    assert.equal(run.unfocusedFrames, 0, `${profile}/${backend} had unfocused frames`);
-    for (const k of ['p50', 'p95', 'p99']) assert.ok(run.frameMs?.[k] > 0, `${profile}/${backend} frameMs.${k} missing`);
-    assert.ok(run.inputDelayMs > 0, `${profile}/${backend} inputDelayMs missing`);
-    assert.doesNotMatch(JSON.stringify(run.gpu ?? {}), /swiftshader|llvmpipe|software/i, `${profile}/${backend} ran on a software GPU`);
-    if (backend === 'webgpu') assert.match(String(run.gpu?.adapter?.vendor), /intel/i, `${profile}/webgpu did not bind the Intel adapter`);
-  }
-  assert.equal(runs.find(x => x.profile === 'phone').viewport.width, 390);
-  for (const port of [4173, 5173]) assert.ok(await portFree(port), `port ${port} still in use after the playtest`);
-});
-
-test('3. the playtest fails and names the profile when frame time is more than 10% over the saved baseline', { timeout: 1_800_000 }, () => {
-  assert.ok(existsSync(join(ROOT, 'tests/perf/baseline.json')), 'tests/perf/baseline.json (the saved baseline) missing');
-  const dir = mkdtempSync(join(tmpdir(), 'bt-base-'));
-  const tight = join(dir, 'baseline.json');
-  const base = JSON.parse(readFileSync(join(ROOT, 'tests/perf/baseline.json'), 'utf8'));
-  for (const run of base.runs) for (const k of Object.keys(run.frameMs)) run.frameMs[k] = 1;
-  writeFileSync(tight, JSON.stringify(base));
-  const r = spawnSync('npm', ['run', 'playtest'], { cwd: ROOT, encoding: 'utf8', timeout: 1_700_000, env: { ...process.env, PLAYTEST_BASELINE: tight } });
-  assert.notEqual(r.status, 0, 'playtest passed against an impossible 1 ms baseline');
-  assert.match(r.stdout + r.stderr, /laptop|phone/, 'failure output does not name the slow profile');
-});
+// Tests 2 and 3 (frame-time baseline) are replaced by tests/checks/t-013-speed.check.mjs (old-vs-new race, no baseline file).
 
 test('4. the playtest refuses a non-local game address or a non-local database before it opens a browser', { timeout: 60_000 }, () => {
   for (const env of [{ PLAYTEST_URL: 'https://play-blocktopia.netlify.app/' }, { VITE_SUPABASE_URL: 'https://xuntmbxiupovuntwrqpr.supabase.co' }]) {
