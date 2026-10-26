@@ -28,7 +28,7 @@ const OLD_REF = env.PLAYTEST_OLD_REF || 'feature/core-engine';
 const ICD = env.PLAYTEST_VK_ICD || '/usr/share/vulkan/icd.d/intel_icd.json';
 const SOFTWARE = /swiftshader|llvmpipe|software|softpipe/i;
 const BUDGET = 0.10; // NEW fails when work per frame or frame work time is more than 10% over OLD
-const ROUNDS = Math.max(2, Number(env.PLAYTEST_ROUNDS) || 30); // turns per build; each turn is FRAMES scripted frames
+const ROUNDS = Math.max(2, Number(env.PLAYTEST_ROUNDS) || 90); // turns per build; each turn is FRAMES scripted frames
 const FRAMES = Math.max(5, Number(env.PLAYTEST_FRAMES) || 15); // short turns: host load drifts, so old and new must meet it within a few frames of each other
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const die = msg => { console.error(`playtest: ${msg}`); process.exit(1); };
