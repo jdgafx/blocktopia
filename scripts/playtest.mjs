@@ -203,6 +203,7 @@ async function startSession(browser, name, url, profile, quality, code, backendN
   const phone = profile.phone;
   const ctx = await browser.newContext({ viewport: profile.viewport, hasTouch: phone, isMobile: phone, deviceScaleFactor: phone ? 2 : 1, recordVideo: { dir: videoDir, size: profile.viewport } });
   const p = await ctx.newPage();
+  p.setDefaultTimeout(120000); // setup steps wait on a loaded host; the run's own time limit is the real bound
   const errors = [];
   p.on('pageerror', e => errors.push(e.message.slice(0, 200)));
   if (phone) await (await ctx.newCDPSession(p)).send('Emulation.setCPUThrottlingRate', { rate: 4 });
@@ -332,7 +333,8 @@ try {
     if (r.seeds.old !== r.seeds.new) console.log(`  note: ${key} OLD and NEW built different worlds (seed ${r.seeds.old} vs ${r.seeds.new}); work counts compare different terrain`);
     for (const [label, a, b] of [['draw calls per frame', r.work.old.calls, r.work.new.calls], ['triangles per frame', r.work.old.triangles, r.work.new.triangles]])
       if (b > a * (1 + BUDGET)) problems.push(`${key}: ${label} ${a} -> ${b} (+${pct(a, b)}%)`);
-    if (r.race.newMs > r.race.oldMs * (1 + BUDGET)) problems.push(`${key}: frame work ${r.race.oldMs} ms -> ${r.race.newMs} ms (+${pct(r.race.oldMs, r.race.newMs)}%)`);
+    // Host load bursts hit one side's median (identical builds showed +30% there with p25 +3% and paired ratio 1.04), so a slowdown counts only when the median, the lower quartile and the paired per-frame ratio all show it.
+    if (r.race.newMs > r.race.oldMs * (1 + BUDGET) && r.race.newP25Ms > r.race.oldP25Ms * (1 + BUDGET) && r.race.pairRatioP50 > 1 + BUDGET) problems.push(`${key}: frame work ${r.race.oldMs} ms -> ${r.race.newMs} ms (+${pct(r.race.oldMs, r.race.newMs)}%)`);
   }
   if (problems.length) { console.error(problems.join('\n')); verdict(false); exitCode = 1; }
   else verdict(true);
