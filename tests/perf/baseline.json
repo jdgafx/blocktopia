@@ -1,0 +1,33 @@
+{
+  "createdAt": "2026-10-26T03:21:42.058Z",
+  "runs": [
+    {
+      "profile": "laptop",
+      "backend": "webgpu",
+      "frameMs": {
+        "mean": 35.75
+      }
+    },
+    {
+      "profile": "laptop",
+      "backend": "webgl2",
+      "frameMs": {
+        "mean": 43.8
+      }
+    },
+    {
+      "profile": "phone",
+      "backend": "webgpu",
+      "frameMs": {
+        "mean": 25.1
+      }
+    },
+    {
+      "profile": "phone",
+      "backend": "webgl2",
+      "frameMs": {
+        "mean": 22.32
+      }
+    }
+  ]
+}

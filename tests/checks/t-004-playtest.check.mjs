@@ -15,7 +15,7 @@ const portFree = port => new Promise(res => { const s = net.createServer().once(
 
 test('1. npm run play starts on the existing local database, keeps every row, and records every migration', { timeout: 600_000 }, async () => {
   sh('supabase', ['start', '-x', 'analytics,vector,studio,imgproxy,edge-runtime']);
-  const tables = ['world_chunks', 'saved_expeditions', 'room_actors'];
+  const tables = ['world_chunks', 'saved_expeditions', 'blocktopia_room_actors'];
   const before = Object.fromEntries(tables.map(t => [t, sql(`select count(*) from public.${t}`)]));
   const child = spawn('npm', ['run', 'play'], { cwd: ROOT, detached: true });
   let out = '';

@@ -12,3 +12,4 @@ output/
 .playwright-cli/
 .acceptance/
 graphify-out/
+playtest-results/
