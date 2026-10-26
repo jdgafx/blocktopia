@@ -5,7 +5,7 @@ import { chromium } from 'playwright-core';
 import { execFileSync } from 'node:child_process';
 import { createServer } from 'node:http';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { cpus, loadavg, tmpdir } from 'node:os';
+import { tmpdir } from 'node:os';
 import { extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -270,24 +270,43 @@ const ATTEMPTS = Math.max(1, Number(env.PLAYTEST_RUNS) || 3);
 const STEP = 1000 / 60; // frame times land on vsync steps, so p50/p95/p99 may move one step before they count as slower
 const limit = (k, b) => k === 'mean' ? b * 1.1 : Math.max(b * 1.1, b + STEP);
 const over = (r, b) => Object.keys(b.frameMs).filter(k => r.frameMs[k] > limit(k, b.frameMs[k]));
-// Other work on the host steals CPU and inflates every number (the phone profile throttles the CPU 4x, so it suffers most).
-// Wait up to 3 minutes for a quiet host, then play anyway and record the load so a noisy result is recognisable.
-async function quietHost() {
-  const quiet = cpus().length / 4;
-  for (let t = 0; t < 18 && loadavg()[0] > quiet; t++) { if (t === 0) console.log(`  host load ${loadavg()[0].toFixed(1)} is high; waiting for it to drop`); await sleep(10000); }
-  return +loadavg()[0].toFixed(1);
+// Other work on this laptop (headless browsers, ffmpeg) changes the phone profile's speed by 2x: its 4x-throttled JS is CPU bound.
+// So the host is measured before and during every attempt (CPU busy from /proc/stat, Intel GPU busy from the GPU's rc6 idle counter).
+// A busy host never produces a speed PASS or FAIL: the run stops with "host too busy to measure". Limits come from measurements, see the T-004 report.
+const RC6 = [0, 1, 2].map(n => `/sys/class/drm/card${n}/gt/gt0/rc6_residency_ms`).find(existsSync);
+const cpuNow = () => { const f = readFileSync('/proc/stat', 'utf8').split('\n')[0].split(/\s+/).slice(1).map(Number); return [f[3] + f[4], f.reduce((x, y) => x + y, 0)]; };
+const gpuNow = () => (RC6 ? Number(readFileSync(RC6, 'utf8')) : 0);
+function meter() {
+  const [i0, t0] = cpuNow(), g0 = gpuNow(), w0 = Date.now();
+  return () => { const [i1, t1] = cpuNow(); return { cpu: +(100 * (1 - (i1 - i0) / (t1 - t0))).toFixed(1), gpu: RC6 ? +Math.max(0, 100 * (1 - (gpuNow() - g0) / (Date.now() - w0))).toFixed(1) : 0 }; };
 }
+const HOST = { cpu: Number(env.PLAYTEST_CPU_MAX) || 15, gpu: Number(env.PLAYTEST_GPU_MAX) || 10, runCpu: Number(env.PLAYTEST_RUN_CPU_MAX) || 30, runGpu: Number(env.PLAYTEST_RUN_GPU_MAX) || 40 };
+const WAIT_MS = (Number(env.PLAYTEST_WAIT_MIN) || 1) * 60000; // one wait in total, before the first profile
+const BUSY_EXIT = 3; // every route was played and saved, but the host was too busy to judge speed
+const busyWords = (h, cpu, gpu) => [h.cpu > cpu && `CPU ${h.cpu}% busy (limit ${cpu}%)`, h.gpu > gpu && `Intel GPU ${h.gpu}% busy (limit ${gpu}%)`].filter(Boolean).join(', ');
+async function waitForQuietHost() {
+  const t0 = Date.now();
+  for (let said = false; ; said = true) {
+    const m = meter(); await sleep(10000); const why = busyWords(m(), HOST.cpu, HOST.gpu);
+    if (!why || Date.now() - t0 >= WAIT_MS) return;
+    if (!said) console.log(`  host busy (${why}); waiting up to ${Math.round(WAIT_MS / 1000)} s for it to calm down, then playing anyway`);
+  }
+}
+const clean = r => !r.failed && !r.unfocusedFrames && !r.busy;
 async function bestOf(profile, backend, b) {
   const attempts = [];
   let best = null;
   for (let i = 1; i <= ATTEMPTS; i++) {
-    const hostLoad = await quietHost();
+    const m = meter();
     const run = await playRoute(profile, backend);
-    attempts.push(run.failed ? { failed: run.failed, hostLoad } : { ...run.frameMs, unfocusedFrames: run.unfocusedFrames, hostLoad });
-    if (!run.failed && !run.unfocusedFrames) {
-      if (best && !best.failed && !best.unfocusedFrames) { for (const k of Object.keys(run.frameMs)) if (run.frameMs[k] < best.frameMs[k]) best.frameMs[k] = run.frameMs[k]; } else best = run;
+    run.host = m();
+    run.busy = busyWords(run.host, HOST.runCpu, HOST.runGpu);
+    attempts.push(run.failed ? { failed: run.failed, host: run.host } : { ...run.frameMs, unfocusedFrames: run.unfocusedFrames, host: run.host, busy: run.busy || undefined });
+    if (clean(run)) {
+      if (best && clean(best)) { for (const k of Object.keys(run.frameMs)) if (run.frameMs[k] < best.frameMs[k]) best.frameMs[k] = run.frameMs[k]; } else best = run;
     } else if (!best) best = run; // keep a bad attempt only until a good one replaces it
-    if (!best.failed && !best.unfocusedFrames && !savingBaseline && b && !over(best, b).length) break;
+    if (run.busy) break; // a busy host stays busy for minutes: more attempts only cost time, and this one is not judged
+    if (clean(best) && !savingBaseline && b && !over(best, b).length) break;
     if (i < ATTEMPTS) console.log(`  attempt ${i}: ${run.failed ? `failed (${run.failed})` : `mean ${run.frameMs.mean} ms`}; trying again`);
   }
   best.attempts = attempts;
@@ -304,32 +323,38 @@ try {
     server = await serve(dist);
   }
   rmSync(RESULTS, { recursive: true, force: true });
+  await waitForQuietHost();
   const runs = [];
   for (const profile of Object.keys(PROFILES)) for (const backend of Object.keys(BACKENDS)) {
     if (env.PLAYTEST_ONLY && env.PLAYTEST_ONLY !== `${profile}/${backend}`) continue; // dev filter, e.g. phone/webgl2
     console.log(`Playing ${profile} on ${backend}…`);
     const run = await bestOf(profile, backend, base?.find(x => x.profile === profile && x.backend === backend));
     runs.push(run);
-    console.log(run.failed ? `  FAILED: ${run.failed}` : `  frame ms p50 ${run.frameMs.p50} p95 ${run.frameMs.p95} p99 ${run.frameMs.p99}, input delay ${run.inputDelayMs} ms, GPU ${run.gpu.adapter?.vendor ?? run.gpu.gameRenderer}, game context ${run.gpu.gameContext}`);
+    console.log(run.failed ? `  FAILED: ${run.failed}` : `${run.busy ? '  (host busy, not judged) ' : ''}  frame ms p50 ${run.frameMs.p50} p95 ${run.frameMs.p95} p99 ${run.frameMs.p99}, input delay ${run.inputDelayMs} ms, GPU ${run.gpu.adapter?.vendor ?? run.gpu.gameRenderer}, game context ${run.gpu.gameContext}`);
   }
   mkdirSync(RESULTS, { recursive: true });
   writeFileSync(`${RESULTS}/latest.json`, JSON.stringify({ createdAt: new Date().toISOString(), runs }, null, 2));
   const problems = runs.filter(r => r.failed).map(r => `${r.profile}/${r.backend}: run failed: ${r.failed}`);
   problems.push(...runs.filter(r => !r.failed && r.unfocusedFrames > 0).map(r => `${r.profile}/${r.backend}: ${r.unfocusedFrames} unfocused frames, numbers are not trustworthy`));
+  const busy = runs.filter(r => !r.failed && r.busy);
+  const busyLine = busy.length && `host busy: ${busy.map(r => `${r.profile}/${r.backend} ${r.busy}`).join('; ')}, speed not judged`;
   if (savingBaseline) {
+    if (busyLine) die(`not saving a baseline from a busy host. ${busyLine}`);
     if (problems.length) die(`not saving a baseline from a bad run:\n${problems.join('\n')}`);
     mkdirSync('tests/perf', { recursive: true });
     writeFileSync(BASELINE, JSON.stringify({ createdAt: new Date().toISOString(), attempts: ATTEMPTS, runs: runs.map(({ profile, backend, frameMs, gpu }) => ({ profile, backend, gameContext: gpu.gameContext, frameMs })) }, null, 2));
     console.log(`Baseline saved to ${BASELINE}`);
   } else {
-    for (const r of runs.filter(x => !x.failed)) {
+    for (const r of runs.filter(x => !x.failed && !x.busy)) { // a busy host's numbers are saved, never judged
       const b = base.find(x => x.profile === r.profile && x.backend === r.backend);
       if (!b) { problems.push(`${r.profile}/${r.backend}: no baseline entry`); continue; }
       if (b.gameContext && r.gpu.gameContext !== b.gameContext) problems.push(`${r.profile}/${r.backend}: the game rendered with ${r.gpu.gameContext}, the baseline was ${b.gameContext}`);
-      for (const k of over(r, b)) problems.push(`${r.profile}/${r.backend}: frame time ${k} ${r.frameMs[k]} ms is ${Math.round((r.frameMs[k] / b.frameMs[k] - 1) * 100)}% over baseline ${b.frameMs[k]} ms (limit ${k === 'mean' ? '10%' : '10% or one 16.7 ms frame step'}, best of ${r.attempts.length}, host load during attempts ${r.attempts.map(a => a.hostLoad).join('/')} on ${cpus().length} cores)`);
+      for (const k of over(r, b)) problems.push(`${r.profile}/${r.backend}: frame time ${k} ${r.frameMs[k]} ms is ${Math.round((r.frameMs[k] / b.frameMs[k] - 1) * 100)}% over baseline ${b.frameMs[k]} ms (limit ${k === 'mean' ? '10%' : '10% or one 16.7 ms frame step'}, best of ${r.attempts.length}, host CPU busy during attempts ${r.attempts.map(a => a.host.cpu).join('/')}%)`);
     }
   }
-  if (problems.length) { console.error(`PLAYTEST FAILED\n${problems.join('\n')}`); exitCode = 1; } else console.log('PLAYTEST PASSED: every profile within 10% of the baseline.');
+  if (problems.length) { console.error(`PLAYTEST FAILED\n${problems.join('\n')}${busyLine ? `\n${busyLine}` : ''}`); exitCode = 1; }
+  else if (busyLine) { console.error(`PLAYTEST NOT JUDGED (exit ${BUSY_EXIT})\n${busyLine}\nNumbers and videos are in ${RESULTS}. Run again on a quiet host for the speed verdict.`); exitCode = BUSY_EXIT; }
+  else console.log('PLAYTEST PASSED: every profile within 10% of the baseline.');
 } catch (error) {
   console.error(`playtest: ${error.message}`);
   exitCode = 1;
