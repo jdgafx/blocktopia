@@ -32,7 +32,7 @@ const RESULTS = 'playtest-results';
 const OLD_REF = env.PLAYTEST_OLD_REF || 'feature/core-engine';
 const ICD = env.PLAYTEST_VK_ICD || '/usr/share/vulkan/icd.d/intel_icd.json';
 const SOFTWARE = /swiftshader|llvmpipe|software|softpipe/i;
-const BUDGET = 0.10; // NEW fails when work per frame or frame work time is more than 10% over OLD
+const BUDGET = 0.10; // NEW fails when work per frame or GPU time is more than 10% over OLD; CPU frame work is reported, not gated (Chris, decision 278, 2026-10-27: the node renderer costs more CPU per draw)
 const ROUNDS = Math.max(2, Number(env.PLAYTEST_ROUNDS) || 90); // most turns per build; each turn is FRAMES scripted frames
 const FRAMES = Math.max(5, Number(env.PLAYTEST_FRAMES) || 15); // short turns: host load drifts, so old and new must meet it within a few frames of each other
 const WORK_TURNS = Math.max(1, Math.round(360 / FRAMES)); // the scripted route repeats every 360 frames: the work count is the mean over exactly one route, so it does not depend on how many rounds fit
@@ -427,7 +427,7 @@ try {
     const run = await playCombo(profile, backend, urls, codes, { left: combos.length - runs.length, setupMs });
     if (run.setupMs) setupMs = Math.max(setupMs, run.setupMs);
     runs.push(run);
-    console.log(run.failed ? `  ${profile}/${backend} FAILED: ${run.failed}` : `  ${profile}/${backend} (${Math.round((Date.now() - t0) / 1000)} s): draw calls ${run.work.old.calls}/${run.work.new.calls}, triangles ${run.work.old.triangles}/${run.work.new.triangles}, frame work ${run.race.oldMs}/${run.race.newMs} ms, GPU ${run.race.oldGpuMs}/${run.race.newGpuMs} ms (old/new), ${run.startup ? `shader build ${run.startup.compileMs} ms + first render ${run.startup.firstRenderMs} ms before the first frame, ` : ''}${run.race.rounds} rounds${run.videoError ? ` (video not saved: ${run.videoError})` : ''}`);
+    console.log(run.failed ? `  ${profile}/${backend} FAILED: ${run.failed}` : `  ${profile}/${backend} (${Math.round((Date.now() - t0) / 1000)} s): draw calls ${run.work.old.calls}/${run.work.new.calls}, triangles ${run.work.old.triangles}/${run.work.new.triangles}, CPU frame work ${run.race.oldMs} -> ${run.race.newMs} ms, GPU time ${run.race.oldGpuMs} -> ${run.race.newGpuMs} ms, frame time (slower of the two) ${Math.max(run.race.oldMs, run.race.oldGpuMs)} -> ${Math.max(run.race.newMs, run.race.newGpuMs)} ms (old -> new), ${run.startup ? `shader build ${run.startup.compileMs} ms + first render ${run.startup.firstRenderMs} ms before the first frame, ` : ''}${run.race.rounds} rounds${run.videoError ? ` (video not saved: ${run.videoError})` : ''}`);
   }
   mkdirSync(RESULTS, { recursive: true });
   writeFileSync(`${RESULTS}/latest.json`, JSON.stringify({ createdAt: new Date().toISOString(), oldRef: OLD_REF, runs }, null, 2));
@@ -444,7 +444,6 @@ try {
     if (!(r.race.oldGpuMs > 0 && r.race.newGpuMs > 0)) problems.push(`${key}: GPU time could not be measured (old ${r.race.oldGpuMs}, new ${r.race.newGpuMs})`);
     else if (r.race.newGpuMs > r.race.oldGpuMs * (1 + BUDGET) && r.race.gpuPairRatioP50 > 1 + BUDGET) problems.push(`${key}: GPU time ${r.race.oldGpuMs} ms -> ${r.race.newGpuMs} ms (+${pct(r.race.oldGpuMs, r.race.newGpuMs)}%)`);
     if (r.pageErrors.new.length) problems.push(`${key}: page errors in NEW: ${r.pageErrors.new.slice(0, 3).join(' | ')}`);
-    if (r.race.newMs > r.race.oldMs * (1 + BUDGET) && r.race.newP25Ms > r.race.oldP25Ms * (1 + BUDGET) && r.race.pairRatioP50 > 1 + BUDGET) problems.push(`${key}: frame work ${r.race.oldMs} ms -> ${r.race.newMs} ms (+${pct(r.race.oldMs, r.race.newMs)}%)`);
   }
   if (problems.length) { console.error(problems.join('\n')); verdict(false); exitCode = 1; }
   else verdict(true);
