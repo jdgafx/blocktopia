@@ -152,6 +152,16 @@ async function dotRight(n, p, id, where) {
 
 // Two players per room: a desktop host and a phone guest. A third player does not reach the world in this local
 // harness today (it connects to the host but is never admitted; ticket T-026 looks for the cause), so no condition here needs one.
+async function sees(p, from, id, after0, ms = 3000) {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    const hit = (await social(p))?.seen?.find(s => s.from === from && s.id === id && s.at >= after0);
+    if (hit) return hit;
+    await wait(20);
+  }
+  return null;
+}
+
 let host, b, code, ids = {};
 
 test('1. room-mates see an emote over the sender, and a ping, within 300 ms; each room-mate has a locator dot; phone buttons are big enough', { timeout: 420_000 }, async () => {
