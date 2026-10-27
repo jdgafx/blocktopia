@@ -137,7 +137,7 @@ export function initEmotes(session, player, renderer, { diagnostics = false } = 
   // Screen spot [x, y] (always finite) for a room-mate: exactly over them when they are in view and that spot is clear of
   // every HUD box. Otherwise on the screen edge on their side (direction in the camera's own right/up plane), sliding along
   // the edge to the nearest clear spot, and inward ring by ring only when a whole edge ring is covered.
-  function locate(position, boxes) {
+  function locate(position, boxesOf) {
     const W = innerWidth, H = innerHeight, cx = W / 2, cy = H / 2, camera = renderer.camera;
     scratch.set(position[0], position[1] + 1, position[2]).applyMatrix4(camera.matrixWorldInverse);
     let dx, dy;
@@ -145,7 +145,16 @@ export function initEmotes(session, player, renderer, { diagnostics = false } = 
       const x = cx + scratch.x * camera.projectionMatrix.elements[0] / -scratch.z * cx;
       const y = cy - scratch.y * camera.projectionMatrix.elements[5] / -scratch.z * cy;
       const m = DOT_HALF + GAP;
-      if (x >= m && x <= W - m && y >= m && y <= H - m && clear(boxes, x, y)) return [x, y];
+      const onScreen = (px, py) => px >= m && px <= W - m && py >= m && py <= H - m;
+      if (onScreen(x, y)) {
+        if (clear(boxesOf(), x, y)) return [x, y];
+        // In view but under a HUD box: the nearest clear spot beside them, if one is close; else the edge.
+        for (let r = STEP; r <= 96; r += STEP) {
+          for (let o = -r; o <= r; o += STEP) {
+            for (const [px, py] of [[x + o, y - r], [x + o, y + r], [x - r, y + o], [x + r, y + o]]) if (onScreen(px, py) && clear(boxesOf(), px, py)) return [px, py];
+          }
+        }
+      }
       dx = x - cx; dy = y - cy;
     } else { dx = scratch.x; dy = -scratch.y; }
     if (!Number.isFinite(dx) || !Number.isFinite(dy) || Math.hypot(dx, dy) < 1e-3) { dx = 0; dy = 1; } // straight behind: bottom
@@ -162,13 +171,87 @@ export function initEmotes(session, player, renderer, { diagnostics = false } = 
       for (let d = 0; d <= P / 2 && d <= best * 1.5 + STEP; d += STEP) {
         for (const p of d ? [at(s0 + d), at(s0 - d)] : [at(s0)]) {
           const dist = Math.hypot(p[0] - ix, p[1] - iy);
-          if (dist < best && clear(boxes, p[0], p[1])) { best = dist; spot = p; }
+          if (dist < best && clear(boxesOf(), p[0], p[1])) { best = dist; spot = p; }
         }
       }
       if (spot) return spot;
     }
     return first; // every ring covered: best effort on the edge
   }
+
+  // Right-hand button stack and the contextual talk button, laid out from the real viewport and the real boxes of the touch
+  // controls, hotbar and aim cross (no per-screen pixel offsets). Tiers, first that fits wins: (1) the stylesheet's own column;
+  // (2) full-size buttons packed row by row into the right half; (3) icon-only buttons; (4) smaller icon-only buttons.
+  const STACK = ['game-menu', 'open-camp', 'open-journal', 'game-controls', 'open-creatures', 'open-emotes'];
+  const BOX_GAP = 6, EDGE = 4, PACK_TOP = 46, SIDE_PROPS = ['left', 'top', 'right', 'bottom', 'transform'];
+  const overlap = (a, b) => a[0] < b[2] && a[2] > b[0] && a[1] < b[3] && a[3] > b[1];
+  const boxOf = (el, pad = 0) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 ? [r.left - pad, r.top - pad, r.right + pad, r.bottom + pad] : null; };
+  let lastLayoutCheck = 0, layoutSeen = '';
+  const hudButtons = () => STACK.map($).filter(Boolean);
+  function layoutSignature() {
+    const els = [...hudButtons(), $('talk-character'), $('btn-jump'), $('hotbar-frame')].filter(Boolean);
+    return `${innerWidth}x${innerHeight}|${els.map((el) => { const r = el.getBoundingClientRect(); return `${el.id}:${Math.round(r.width)}x${Math.round(r.height)}`; })}`;
+  }
+  function layoutHud() {
+    const W = innerWidth, H = innerHeight, buttons = hudButtons(), talk = $('talk-character');
+    if (!buttons.length || !boxOf(openButton)) return; // the HUD is not drawn yet: try again on the next tick
+    const reset = (cls) => {
+      document.body.classList.remove('hud-compact', 'hud-tiny'); if (cls) document.body.classList.add(cls);
+      for (const el of [...buttons, talk]) if (el) for (const p of SIDE_PROPS) el.style.removeProperty(p);
+    };
+    const fixedBoxes = () => [...document.querySelectorAll('#touch-controls button, #joystick-zone, #hotbar-frame')].map((el) => boxOf(el, BOX_GAP)).concat([boxOf($('crosshair'), 14)]).filter(Boolean);
+    const place = (el, x, y) => { el.style.right = el.style.bottom = 'auto'; el.style.left = `${x}px`; el.style.top = `${y}px`; };
+    // First free spot for a w x h box, row by row, from (right edge of region) leftwards; null if none.
+    const firstFit = (w, h, obstacles, region) => {
+      for (let y = region[1]; y + h <= region[3]; y += EDGE) for (let x = region[2] - w; x >= region[0]; x -= EDGE) {
+        if (!obstacles.some((o) => overlap([x, y, x + w, y + h], o))) return [x, y];
+      }
+      return null;
+    };
+    const pack = (region) => {
+      const obstacles = fixedBoxes(), spots = [];
+      for (const el of buttons) {
+        const { width: w, height: h } = el.getBoundingClientRect(), spot = firstFit(w, h, obstacles, region);
+        spots.push(spot);
+        if (spot) obstacles.push([spot[0] - BOX_GAP, spot[1] - BOX_GAP, spot[0] + w + BOX_GAP, spot[1] + h + BOX_GAP]);
+      }
+      return spots;
+    };
+    const right = [W / 2 + 24, PACK_TOP, W - EDGE - 8, H - EDGE - 4], whole = [EDGE, EDGE, W - EDGE, H - EDGE];
+    let done = false, spots;
+    for (const [cls, packed] of [[null, false], [null, true], ['hud-compact', true], ['hud-tiny', true]]) {
+      reset(cls);
+      if (!packed) {
+        const obstacles = fixedBoxes(), rects = buttons.map((el) => boxOf(el));
+        done = rects.every((r, i) => r && r[0] >= EDGE && r[1] >= EDGE && r[2] <= W - EDGE && r[3] <= H - EDGE
+          && !obstacles.some((o) => overlap(r, o)) && !rects.some((q, j) => j > i && q && overlap(r, q)));
+        if (done) break;
+        continue;
+      }
+      spots = pack(right);
+      if (spots.every(Boolean)) { spots.forEach((s, i) => place(buttons[i], s[0], s[1])); done = true; break; }
+    }
+    if (!done) { // nothing fits the right half even at the smallest size: use any free spot on the screen, else the stylesheet's own spot
+      const obstacles = fixedBoxes(); const rest = [];
+      spots.forEach((s, i) => {
+        const { width: w, height: h } = buttons[i].getBoundingClientRect();
+        s ??= firstFit(w, h, obstacles.concat(rest), whole);
+        if (s) { place(buttons[i], s[0], s[1]); rest.push([s[0] - BOX_GAP, s[1] - BOX_GAP, s[0] + w + BOX_GAP, s[1] + h + BOX_GAP]); }
+      });
+    }
+    if (talk && !talk.hidden && boxOf(talk)) { // keep the stylesheet's spot when it is clear, else the nearest clear spot above the hotbar
+      const obstacles = fixedBoxes().concat(buttons.map((el) => boxOf(el, BOX_GAP)).filter(Boolean)), own = boxOf(talk);
+      if (obstacles.some((o) => overlap(own, o))) {
+        const w = own[2] - own[0], h = own[3] - own[1], hot = $('hotbar-frame') && boxOf($('hotbar-frame')), start = Math.round((hot ? hot[1] : H - 100) - BOX_GAP - h);
+        search: for (let y = start; y >= EDGE; y -= EDGE) for (let o = 0; o <= W / 2; o += EDGE) for (const x of o ? [(W - w) / 2 + o, (W - w) / 2 - o] : [(W - w) / 2]) {
+          if (x >= EDGE && x + w <= W - EDGE && !obstacles.some((q) => overlap([x, y, x + w, y + h], q))) { talk.style.transform = 'none'; place(talk, x, y); break search; }
+        }
+      }
+    }
+    layoutSeen = layoutSignature();
+  }
+  window.addEventListener('resize', () => layoutHud());
+  window.addEventListener('orientationchange', () => layoutHud());
 
   function update(now) {
     for (const [key, entry] of live) {
@@ -178,7 +261,9 @@ export function initEmotes(session, player, renderer, { diagnostics = false } = 
       const state = session.remoteStates.get(entry.from);
       if (!entry.ping && state) entry.sprite.position.set(state.position[0], state.position[1] + 2.4, state.position[2]);
     }
-    const ids = new Set(), boxes = hudBoxes();
+    if (now - lastLayoutCheck > 250) { lastLayoutCheck = now; if (layoutSignature() !== layoutSeen) layoutHud(); }
+    let boxes; const boxesOf = () => (boxes ??= hudBoxes()); // read the HUD only when a dot needs it
+    const ids = new Set();
     for (const { playerId } of session.members) {
       if (playerId === session.playerId) continue;
       ids.add(playerId);
@@ -190,7 +275,7 @@ export function initEmotes(session, player, renderer, { diagnostics = false } = 
       }
       const state = session.remoteStates.get(playerId);
       if (!state || now - state.at > 10000) { dot.hidden = true; continue; }
-      const [x, y] = locate(state.position, boxes);
+      const [x, y] = locate(state.position, boxesOf);
       dot.style.left = `${x}px`; dot.style.top = `${y}px`;
       dot.hidden = false;
     }

@@ -196,10 +196,12 @@ body.emote-open #room-gate { display: none !important; }
 #emote-wheel [data-quiet][aria-pressed=true] { background: #c7ef91; color: #071c14; }
 #emote-wheel button:focus-visible, #open-emotes:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
 .locator { position: fixed; box-sizing: border-box; width: 18px; height: 18px; margin: -9px 0 0 -9px; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 6px #000; z-index: 5; pointer-events: none; }
-/* Short screens (a phone held sideways): the right-hand buttons run out of height, so the last three move to a second column. */
-@media (max-height: 520px) {
-  #hud #game-controls { top: 82px; right: 176px; }
-  #hud #open-creatures { top: 144px; right: 176px; }
-  #hud #open-emotes { top: 206px; right: 176px; }
-}
+/* Icon-only sizes for the right-hand buttons: emotes.js adds hud-compact, then hud-tiny, only when the full-size buttons cannot
+   be laid out clear of the touch controls and the aim cross. The title on each button still names it. */
+body.hud-compact #hud :is(#game-menu, #open-camp, #open-journal, #game-controls, #open-creatures, #open-emotes) { min-height: 48px; min-width: 48px; padding: 4px; justify-content: center; }
+body.hud-compact #hud :is(#game-menu, #open-camp, #open-journal, #game-controls, #open-creatures, #open-emotes) .menu-icon { width: 36px; height: 36px; }
+body.hud-tiny #hud :is(#game-menu, #open-camp, #open-journal, #game-controls, #open-creatures, #open-emotes) { min-height: 38px; min-width: 38px; padding: 2px; justify-content: center; }
+body.hud-tiny #hud :is(#game-menu, #open-camp, #open-journal, #game-controls, #open-creatures, #open-emotes) .menu-icon { width: 28px; height: 28px; }
+body.hud-compact #hud :is(#game-menu, #open-camp, #open-journal, #game-controls, #open-creatures, #open-emotes) > span,
+body.hud-tiny #hud :is(#game-menu, #open-camp, #open-journal, #game-controls, #open-creatures, #open-emotes) > span { display: none; }
 .locator[hidden] { display: none; }
