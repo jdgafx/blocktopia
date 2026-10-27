@@ -195,5 +195,11 @@ body.emote-open #room-gate { display: none !important; }
 #emote-wheel [data-quiet] { width: 100%; margin-top: 8px; min-height: 64px; flex-direction: row; justify-content: center; gap: 10px; }
 #emote-wheel [data-quiet][aria-pressed=true] { background: #c7ef91; color: #071c14; }
 #emote-wheel button:focus-visible, #open-emotes:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
-.locator { position: fixed; width: 16px; height: 16px; margin: -8px 0 0 -8px; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 6px #000; z-index: 5; pointer-events: auto; }
+.locator { position: fixed; box-sizing: border-box; width: 18px; height: 18px; margin: -9px 0 0 -9px; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 6px #000; z-index: 5; pointer-events: none; }
+/* Short screens (a phone held sideways): the right-hand buttons run out of height, so the last three move to a second column. */
+@media (max-height: 520px) {
+  #hud #game-controls { top: 82px; right: 176px; }
+  #hud #open-creatures { top: 144px; right: 176px; }
+  #hud #open-emotes { top: 206px; right: 176px; }
+}
 .locator[hidden] { display: none; }

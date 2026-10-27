@@ -117,24 +117,57 @@ export function initEmotes(session, player, renderer, { diagnostics = false } = 
     else if (event.code === 'KeyG' && !event.repeat && (!wheel.hidden || player.active)) { event.preventDefault(); wheel.hidden ? open() : close(); }
   }, true);
 
-  // Screen spot [x, y] (always finite) for a room-mate. Inside the safe box (clear of the right-hand HUD buttons, the top
-  // text and the bottom controls) and in front of the camera: exactly over them. Otherwise (outside the view, beside,
-  // behind): on the box edge, in the direction the friend lies in the camera's own right/up plane.
-  function locate(position) {
-    const W = innerWidth, H = innerHeight, coarse = matchMedia('(pointer: coarse)').matches;
-    const L = 24, R = Math.max(L + 40, W - 190), T = 96, B = Math.max(T + 40, H - (coarse ? 240 : 130));
-    const cx = (L + R) / 2, cy = (T + B) / 2, camera = renderer.camera;
+  // The HUD's real drawn boxes right now (buttons, panels, text, hotbar, touch controls), each grown by the dot's radius plus a gap.
+  const DOT_HALF = 9, GAP = 3, STEP = 8;
+  function hudBoxes() {
+    const boxes = [], pad = DOT_HALF + GAP;
+    for (const el of document.querySelectorAll('#hud *, #touch-controls *')) {
+      if (el.classList.contains('locator') || el.id === 'crosshair' || el.id === 'break-progress' || el.closest('[hidden]')) continue;
+      const cs = getComputedStyle(el);
+      if (cs.visibility === 'hidden' || cs.display === 'none' || +cs.opacity === 0) continue;
+      if (cs.position !== 'fixed' && !/^(BUTTON|INPUT|SELECT)$/.test(el.tagName)) continue;
+      if (!el.children.length && !el.textContent.trim() && el.tagName !== 'BUTTON') continue; // empty status boxes draw nothing
+      const r = el.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0) boxes.push([r.left - pad, r.top - pad, r.right + pad, r.bottom + pad]);
+    }
+    return boxes;
+  }
+  const clear = (boxes, x, y) => !boxes.some(([l, t, r, b]) => x >= l && x <= r && y >= t && y <= b);
+
+  // Screen spot [x, y] (always finite) for a room-mate: exactly over them when they are in view and that spot is clear of
+  // every HUD box. Otherwise on the screen edge on their side (direction in the camera's own right/up plane), sliding along
+  // the edge to the nearest clear spot, and inward ring by ring only when a whole edge ring is covered.
+  function locate(position, boxes) {
+    const W = innerWidth, H = innerHeight, cx = W / 2, cy = H / 2, camera = renderer.camera;
     scratch.set(position[0], position[1] + 1, position[2]).applyMatrix4(camera.matrixWorldInverse);
     let dx, dy;
     if (scratch.z < -0.1) {
-      const x = W / 2 + scratch.x * camera.projectionMatrix.elements[0] / -scratch.z * W / 2;
-      const y = H / 2 - scratch.y * camera.projectionMatrix.elements[5] / -scratch.z * H / 2;
-      if (x >= L && x <= R && y >= T && y <= B) return [x, y];
+      const x = cx + scratch.x * camera.projectionMatrix.elements[0] / -scratch.z * cx;
+      const y = cy - scratch.y * camera.projectionMatrix.elements[5] / -scratch.z * cy;
+      const m = DOT_HALF + GAP;
+      if (x >= m && x <= W - m && y >= m && y <= H - m && clear(boxes, x, y)) return [x, y];
       dx = x - cx; dy = y - cy;
     } else { dx = scratch.x; dy = -scratch.y; }
     if (!Number.isFinite(dx) || !Number.isFinite(dy) || Math.hypot(dx, dy) < 1e-3) { dx = 0; dy = 1; } // straight behind: bottom
-    const k = Math.min(dx > 0 ? (R - cx) / dx : dx < 0 ? (L - cx) / dx : Infinity, dy > 0 ? (B - cy) / dy : dy < 0 ? (T - cy) / dy : Infinity);
-    return [cx + dx * k, cy + dy * k];
+    const ringMax = Math.floor(0.24 * Math.min(W, H) / 16);
+    let first;
+    for (let k = 0; k <= ringMax; k++) {
+      const m = DOT_HALF + GAP + 16 * k, w = Math.max(W - 2 * m, 1), h = Math.max(H - 2 * m, 1), P = 2 * (w + h);
+      const tx = dx > 0 ? (W - m - cx) / dx : dx < 0 ? (m - cx) / dx : Infinity, ty = dy > 0 ? (H - m - cy) / dy : dy < 0 ? (m - cy) / dy : Infinity;
+      const ix = cx + dx * Math.min(tx, ty), iy = cy + dy * Math.min(tx, ty);
+      const at = (s) => { s = ((s % P) + P) % P; return s < w ? [m + s, m] : s < w + h ? [W - m, m + s - w] : s < 2 * w + h ? [W - m - (s - w - h), H - m] : [m, H - m - (s - 2 * w - h)]; };
+      const s0 = tx < ty ? (dx > 0 ? w + (iy - m) : 2 * w + h + (H - m - iy)) : (dy < 0 ? ix - m : w + h + (W - m - ix));
+      first ??= at(s0);
+      let best = Infinity, spot;
+      for (let d = 0; d <= P / 2 && d <= best * 1.5 + STEP; d += STEP) {
+        for (const p of d ? [at(s0 + d), at(s0 - d)] : [at(s0)]) {
+          const dist = Math.hypot(p[0] - ix, p[1] - iy);
+          if (dist < best && clear(boxes, p[0], p[1])) { best = dist; spot = p; }
+        }
+      }
+      if (spot) return spot;
+    }
+    return first; // every ring covered: best effort on the edge
   }
 
   function update(now) {
@@ -145,7 +178,7 @@ export function initEmotes(session, player, renderer, { diagnostics = false } = 
       const state = session.remoteStates.get(entry.from);
       if (!entry.ping && state) entry.sprite.position.set(state.position[0], state.position[1] + 2.4, state.position[2]);
     }
-    const ids = new Set();
+    const ids = new Set(), boxes = hudBoxes();
     for (const { playerId } of session.members) {
       if (playerId === session.playerId) continue;
       ids.add(playerId);
@@ -157,7 +190,7 @@ export function initEmotes(session, player, renderer, { diagnostics = false } = 
       }
       const state = session.remoteStates.get(playerId);
       if (!state || now - state.at > 10000) { dot.hidden = true; continue; }
-      const [x, y] = locate(state.position);
+      const [x, y] = locate(state.position, boxes);
       dot.style.left = `${x}px`; dot.style.top = `${y}px`;
       dot.hidden = false;
     }
