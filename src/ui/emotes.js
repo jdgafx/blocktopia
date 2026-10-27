@@ -117,6 +117,26 @@ export function initEmotes(session, player, renderer, { diagnostics = false } = 
     else if (event.code === 'KeyG' && !event.repeat && (!wheel.hidden || player.active)) { event.preventDefault(); wheel.hidden ? open() : close(); }
   }, true);
 
+  // Screen spot [x, y] (always finite) for a room-mate. Inside the safe box (clear of the right-hand HUD buttons, the top
+  // text and the bottom controls) and in front of the camera: exactly over them. Otherwise (outside the view, beside,
+  // behind): on the box edge, in the direction the friend lies in the camera's own right/up plane.
+  function locate(position) {
+    const W = innerWidth, H = innerHeight, coarse = matchMedia('(pointer: coarse)').matches;
+    const L = 24, R = Math.max(L + 40, W - 190), T = 96, B = Math.max(T + 40, H - (coarse ? 240 : 130));
+    const cx = (L + R) / 2, cy = (T + B) / 2, camera = renderer.camera;
+    scratch.set(position[0], position[1] + 1, position[2]).applyMatrix4(camera.matrixWorldInverse);
+    let dx, dy;
+    if (scratch.z < -0.1) {
+      const x = W / 2 + scratch.x * camera.projectionMatrix.elements[0] / -scratch.z * W / 2;
+      const y = H / 2 - scratch.y * camera.projectionMatrix.elements[5] / -scratch.z * H / 2;
+      if (x >= L && x <= R && y >= T && y <= B) return [x, y];
+      dx = x - cx; dy = y - cy;
+    } else { dx = scratch.x; dy = -scratch.y; }
+    if (!Number.isFinite(dx) || !Number.isFinite(dy) || Math.hypot(dx, dy) < 1e-3) { dx = 0; dy = 1; } // straight behind: bottom
+    const k = Math.min(dx > 0 ? (R - cx) / dx : dx < 0 ? (L - cx) / dx : Infinity, dy > 0 ? (B - cy) / dy : dy < 0 ? (T - cy) / dy : Infinity);
+    return [cx + dx * k, cy + dy * k];
+  }
+
   function update(now) {
     for (const [key, entry] of live) {
       const age = now - entry.born;
@@ -137,11 +157,8 @@ export function initEmotes(session, player, renderer, { diagnostics = false } = 
       }
       const state = session.remoteStates.get(playerId);
       if (!state || now - state.at > 10000) { dot.hidden = true; continue; }
-      scratch.set(state.position[0], state.position[1] + 1, state.position[2]).project(renderer.camera);
-      if (scratch.z > 1) { scratch.x = -scratch.x; scratch.y = -scratch.y; } // behind the camera: point the other way
-      const edge = Math.max(1, Math.abs(scratch.x) / 0.9, Math.abs(scratch.y) / 0.8);
-      dot.style.left = `${(scratch.x / edge * 0.5 + 0.5) * innerWidth}px`;
-      dot.style.top = `${(-scratch.y / edge * 0.5 + 0.5) * innerHeight}px`;
+      const [x, y] = locate(state.position);
+      dot.style.left = `${x}px`; dot.style.top = `${y}px`;
       dot.hidden = false;
     }
     for (const [id, dot] of dots) if (!ids.has(id)) { dot.remove(); dots.delete(id); }

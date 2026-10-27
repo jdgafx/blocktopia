@@ -195,5 +195,5 @@ body.emote-open #room-gate { display: none !important; }
 #emote-wheel [data-quiet] { width: 100%; margin-top: 8px; min-height: 64px; flex-direction: row; justify-content: center; gap: 10px; }
 #emote-wheel [data-quiet][aria-pressed=true] { background: #c7ef91; color: #071c14; }
 #emote-wheel button:focus-visible, #open-emotes:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
-.locator { position: fixed; width: 16px; height: 16px; margin: -8px 0 0 -8px; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 6px #000; pointer-events: none; }
+.locator { position: fixed; width: 16px; height: 16px; margin: -8px 0 0 -8px; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 6px #000; z-index: 5; pointer-events: auto; }
 .locator[hidden] { display: none; }
