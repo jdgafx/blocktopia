@@ -268,6 +268,8 @@ test('3. no text path: the wheel has no text box, and forged text or unknown ids
 // Menu, Camp and Journal sat on Jump, Break and Place on every sideways size).
 const MUST = ['game-menu', 'open-camp', 'open-journal', 'game-controls', 'open-creatures', 'open-emotes', 'btn-jump', 'btn-break', 'btn-place', 'joystick-zone'];
 test('4. sideways phones: every HUD button on screen, none over the aim cross, a touch control or another button', { timeout: 900_000 }, async () => {
+  // test 1's two pages stay open otherwise and starve the new phone of world textures
+  await host?.context().close().catch(() => {}); await b?.context().close().catch(() => {});
   const bad = [];
   for (const [W, H] of [[915, 412], [844, 390], [740, 360], [667, 375], [568, 320]]) {
     const p = await player('side', { phone: true, viewport: { width: W, height: H } }); p.isMobile = true;
