@@ -64,7 +64,7 @@ const visible = (p, id) => p.evaluate(id => { let o = window.__THREE_GAME_DIAGNO
 
 async function player(who, { phone = false } = {}) {
   const ctx = await browser.newContext(phone ? { viewport: { width: 412, height: 915 }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 } : { viewport: { width: 1280, height: 720 } });
-  const p = await ctx.newPage(); p.setDefaultTimeout(120_000);
+  await ctx.addInitScript(() => { try { localStorage.setItem('blocktopia-mouse-mode', 'cursor'); } catch {} }); const p = await ctx.newPage(); p.setDefaultTimeout(120_000); p.on('pageerror', e => console.log('PAGEERR', who, e.message.slice(0, 300))); p.on('console', m => { if (m.type() === 'error') console.log('CONSOLE', who, m.text().slice(0, 300)); });
   await p.goto(`${URL0}/?diagnostics`, { waitUntil: 'load' });
   await signIn(p, who);
   return p;
