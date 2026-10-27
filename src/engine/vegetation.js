@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { MeshStandardNodeMaterial } from 'three/webgpu';
+import { positionLocal, sin, uniform, uv, vec3 } from 'three/tsl';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { BLOCKS } from '../constants/blocks.js';
 
@@ -40,20 +42,13 @@ export class Vegetation {
       rejectLeaf(new Error('Leaf textures could not load'));
     });
     map.colorSpace = THREE.SRGBColorSpace; map.anisotropy = 4;
-    this.leafMaterial = new THREE.MeshStandardMaterial({ name: 'Living oak foliage', map, alphaTest: .45,
-      side: THREE.DoubleSide, roughness: .85, metalness: 0, alphaToCoverage: true });
-    this.leafDepth = new THREE.MeshDepthMaterial({ map, alphaTest: .45, side: THREE.DoubleSide, depthPacking: THREE.RGBADepthPacking });
-    this.wind = { value: 0 };
-    for (const material of [this.leafMaterial, this.leafDepth]) material.onBeforeCompile = shader => {
-      shader.uniforms.vegetationTime = this.wind;
-      shader.vertexShader = `uniform float vegetationTime;\n${shader.vertexShader}`.replace('#include <begin_vertex>', `
-        #include <begin_vertex>
-        #ifdef USE_INSTANCING
-          float phase = instanceMatrix[3].x * .37 + instanceMatrix[3].z * .29;
-          transformed.x += sin(vegetationTime * 1.35 + phase) * .065 * uv.y;
-          transformed.z += sin(vegetationTime * .83 + phase) * .035 * uv.y;
-        #endif`);
-    };
+    this.leafMaterial = new MeshStandardNodeMaterial({ name: 'Living oak foliage', map, alphaTest: .45,
+      side: THREE.DoubleSide, roughness: .85, metalness: 0, alphaToCoverage: true, vertexColors: true });
+    this.wind = uniform(0);
+    // Leaves are baked into world space, so the sway is in world axes; shortcut: phase comes from the vertex, not the leaf origin.
+    const phase = positionLocal.x.mul(.37).add(positionLocal.z.mul(.29));
+    this.leafMaterial.positionNode = positionLocal.add(vec3(
+      sin(this.wind.mul(1.35).add(phase)).mul(.065).mul(uv().y), 0, sin(this.wind.mul(.83).add(phase)).mul(.035).mul(uv().y)));
   }
 
   build(chunk, world, camera = { x: 8, z: 12 }) {
@@ -128,15 +123,38 @@ export class Vegetation {
         const j = Math.floor(shuffle() * (i + 1)); [batch[i], batch[j]] = [batch[j], batch[i]];
       }
       if (!batch.length) continue;
-      const mesh = new THREE.InstancedMesh(this.leafGeometry, this.leafMaterial, batch.length);
-      batch.forEach((entry, index) => { mesh.setMatrixAt(index, entry.matrix); mesh.setColorAt(index, entry.color); });
-      mesh.instanceMatrix.needsUpdate = true; mesh.instanceColor.needsUpdate = true;
-      mesh.userData.fullCount = batch.length; mesh.userData.herbs = !shadow;
-      mesh.castShadow = shadow; mesh.receiveShadow = true; mesh.customDepthMaterial = this.leafDepth;
-      mesh.computeBoundingSphere(); group.add(mesh);
+      const mesh = new THREE.Mesh(this._leafGeometry(batch), this.leafMaterial);
+      mesh.userData.fullCount = batch.length; mesh.userData.herbs = !shadow; mesh.userData.leaves = true;
+      mesh.castShadow = shadow; mesh.receiveShadow = true; group.add(mesh);
     }
     this.setLod(group, camera);
     return group;
+  }
+
+  // Leaves are baked into one plain mesh per chunk: three's node renderer builds a separate shader for every
+  // InstancedMesh (its matrix array length and uuid are part of the program key), ~20 ms each as chunks stream in.
+  // shortcut: ~290 B per leaf of vertex data instead of 64 B of instance matrix, fine at today's chunk counts; go back to InstancedMesh if three shares instanced programs.
+  _leafGeometry(batch) {
+    const src = this.leafGeometry, n = src.attributes.position.count, indexCount = src.index.count;
+    const position = new Float32Array(batch.length * n * 3), normal = new Float32Array(batch.length * n * 3),
+      uvs = new Float32Array(batch.length * n * 2), color = new Float32Array(batch.length * n * 3), index = new Uint32Array(batch.length * indexCount);
+    const p = new THREE.Vector3(), nm = new THREE.Matrix3();
+    batch.forEach((entry, i) => {
+      nm.getNormalMatrix(entry.matrix);
+      for (let v = 0; v < n; v++) {
+        const o = i * n + v;
+        p.fromBufferAttribute(src.attributes.position, v).applyMatrix4(entry.matrix).toArray(position, o * 3);
+        p.fromBufferAttribute(src.attributes.normal, v).applyMatrix3(nm).normalize().toArray(normal, o * 3);
+        uvs.set([src.attributes.uv.getX(v), src.attributes.uv.getY(v)], o * 2);
+        entry.color.toArray(color, o * 3);
+      }
+      for (let k = 0; k < indexCount; k++) index[i * indexCount + k] = i * n + src.index.getX(k);
+    });
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(position, 3)); geometry.setAttribute('normal', new THREE.BufferAttribute(normal, 3));
+    geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2)); geometry.setAttribute('color', new THREE.BufferAttribute(color, 3));
+    geometry.setIndex(new THREE.BufferAttribute(index, 1)); geometry.userData.indicesPerLeaf = indexCount;
+    geometry.computeBoundingSphere(); return geometry;
   }
 
   _treeGeometry(tree, highest) {
@@ -166,8 +184,11 @@ export class Vegetation {
     const distance = Math.hypot(camera.x - center.x, camera.z - center.z);
     const density = distance > 42 ? .2 : distance > 24 ? .65 : 1;
     for (const mesh of group.children) {
-      if (mesh.isInstancedMesh) {
-        mesh.count = mesh.userData.herbs ? (distance < 24 ? mesh.userData.fullCount : 0) : Math.ceil(mesh.userData.fullCount * density);
+      if (mesh.userData.leaves) {
+        // The shuffled prefix of the baked leaves is the LOD: draw range counts indices, one leaf is a fixed run of indices.
+        const count = mesh.userData.herbs ? (distance < 24 ? mesh.userData.fullCount : 0) : Math.ceil(mesh.userData.fullCount * density);
+        mesh.userData.count = count; mesh.visible = count > 0;
+        mesh.geometry.setDrawRange(0, count * mesh.geometry.userData.indicesPerLeaf);
         mesh.castShadow = !mesh.userData.herbs && distance < 26;
       } else mesh.castShadow = distance < 38;
     }
@@ -176,7 +197,7 @@ export class Vegetation {
   remove(group) {
     group.traverse(mesh => {
       if (!mesh.isMesh) return;
-      if (mesh.isInstancedMesh) mesh.dispose(); else mesh.geometry.dispose();
+      mesh.geometry.dispose();
     });
   }
 

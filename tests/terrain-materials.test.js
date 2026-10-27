@@ -14,7 +14,7 @@ it('loads verified local scans with correct PBR color spaces, mip filters and sh
     queueMicrotask(() => { map.image = { width: 1024, height: 1024 }; loaded(map); });
     return map;
   });
-  const materials = buildTerrainMaterials({ capabilities: { getMaxAnisotropy: () => 16 } });
+  const materials = buildTerrainMaterials({ getMaxAnisotropy: () => 16 });
   for (const index of [1, 6]) expect(materials[index].map.version).toBe(0);
   await materials.ready;
   expect(materials).toHaveLength(16);
@@ -36,8 +36,12 @@ it('loads verified local scans with correct PBR color spaces, mip filters and sh
   for (const index of [0,1,2,3,4,5,6,7,8,9,10]) {
     expect(materials[index].aoMap).toBe(materials[index].roughnessMap);
     expect(materials[index].metalnessMap).toBe(materials[index].roughnessMap);
-    expect(materials[index].vertexColors).toBe(true);
+    expect(materials[index].vertexColors).toBe(false);
   }
+  const [opaque, glass] = materials.chunk;
+  expect(opaque.vertexColors).toBe(true);
+  expect(glass.transparent).toBe(true);
+  expect(opaque.colorNode).toBeTruthy();
   const provenance = JSON.parse(readFileSync(new URL('../public/textures/pbr/provenance.json', import.meta.url)));
   expect(provenance.sources).toHaveLength(24);
   for (const source of provenance.sources) {
@@ -51,6 +55,6 @@ it('reports failed material requests instead of claiming textures loaded', async
     queueMicrotask(failed);
     return new THREE.Texture();
   });
-  const materials = buildTerrainMaterials({ capabilities: { getMaxAnisotropy: () => 1 } });
+  const materials = buildTerrainMaterials({ getMaxAnisotropy: () => 1 });
   await expect(materials.ready).rejects.toThrow('Texture unavailable: /textures/pbr/sparse_grass-color.jpg');
 });

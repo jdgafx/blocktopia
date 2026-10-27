@@ -63,17 +63,15 @@ describe('buildChunkMesh', () => {
     expect(texture.wrapT).toBe(THREE.ClampToEdgeWrapping);
   });
 
-  it('uses independent full-tile UVs and one non-overlapping draw group per material', () => {
+  it('uses independent full-tile UVs and merges all opaque tiles into one draw group', () => {
     const grass = meshSingleBlock(BLOCKS.GRASS);
     expect([...grass.attributes.uv.array].every(value => value === 0 || value === 1)).toBe(true);
-    expect(grass.groups).toEqual([
-      { start: 0, count: 6, materialIndex: 0 },
-      { start: 6, count: 24, materialIndex: 1 },
-      { start: 30, count: 6, materialIndex: 2 },
-    ]);
+    expect(grass.groups).toEqual([{ start: 0, count: 36, materialIndex: 0 }]);
     expect(grass.index.count).toBe(36);
-    expect(meshSingleBlock(BLOCKS.WOOD_LOG).groups.map(group => group.materialIndex)).toEqual([4, 5]);
-    expect(meshSingleBlock(BLOCKS.COAL_ORE).groups[0].materialIndex).toBe(12);
+    // Each vertex carries its tile so one shader picks the texture layer: top, 4 sides, bottom of grass.
+    expect([...grass.attributes.tile.array].sort((a, b) => a - b)).toEqual([...Array(4).fill(0), ...Array(16).fill(1), ...Array(4).fill(2)]);
+    expect(meshSingleBlock(BLOCKS.WOOD_LOG).groups).toEqual([{ start: 0, count: 36, materialIndex: 0 }]);
+    expect([...new Set(meshSingleBlock(BLOCKS.COAL_ORE).attributes.tile.array)]).toEqual([12]);
   });
 
   it('culls shared glass faces while keeping exterior glass faces', () => {
@@ -82,7 +80,7 @@ describe('buildChunkMesh', () => {
     const world = { getBlock: (x, y, z) => y === 0 && z === 0 && (x === 0 || x === 1) ? BLOCKS.GLASS : BLOCKS.AIR };
     const geo = buildChunkMesh(chunk, world);
     expect(geo._posCount).toBe(24);
-    expect(geo.groups).toEqual([{ start: 0, count: 36, materialIndex: 11 }]);
+    expect(geo.groups).toEqual([{ start: 0, count: 36, materialIndex: 1 }]);
   });
 
   it('winds top and bottom triangles toward their declared normals', () => {

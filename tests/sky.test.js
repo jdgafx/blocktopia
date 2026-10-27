@@ -8,7 +8,7 @@ it('keeps the atmosphere centered on distant journeys and aligned with the light
   camera.position.set(10000, 35, -10000);
   updateSky(sky, camera, sun, 0.8);
   expect(sky.position.equals(camera.position)).toBe(true);
-  expect(sky.material.uniforms.sunPosition.value.equals(sun)).toBe(true);
+  expect(sky.sunPosition.value.equals(sun)).toBe(true);
   expect(sky.visible).toBe(true);
   updateSky(sky, camera, sun, 0);
   expect(sky.visible).toBe(false);
