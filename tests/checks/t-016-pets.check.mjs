@@ -1,12 +1,13 @@
 // blocktopia:T-016 check: pets. A new player's egg hatches into Pip by walking; Pip follows, friends see and pat it; it saves.
 // Run: node --test tests/checks/t-016-pets.check.mjs   Needs Docker + local Supabase (`npm run play` once) and Chrome.
 // Real build of this tree, real browser, real local DB, real keyboard walking. Local database only.
+// Two players per room at most: a third joiner is not admitted in this harness today (ticket T-026 looks for why).
 //
 // INTERFACE the worker builds (only under ?diagnostics, like __THREE_GAME_DIAGNOSTICS__; main.js may stay untouched):
 //   window.__PET_DIAGNOSTICS__ = {
 //     mine: { stage: 'egg' | 'pet', progress: 0..1 (egg only; 1 = hatch), name, species, trust: number,
 //             position: [x, y, z] (pet only) },                                 // this player's own egg or pet
-//     seen: [{ name, ownerEmail, position: [x, y, z], meshId }] }              // other players' pets drawn here;
+//     seen: [{ name, ownerId, position: [x, y, z], meshId }] }              // other players' pets drawn here;
 //                                                                             // meshId = uuid of its three.js object
 //   A pat button `button[data-action="pat"]` shows while the player stands within 3 blocks of someone else's pet.
 //   Creature panel buttons carry `data-action="<action>"` (one attribute in button() of src/ui/creatures.js).
@@ -75,7 +76,8 @@ async function signIn(p, who) {
 // Enter a world: a new room, or the room `code` (typed into the room code box, as an invited friend does).
 async function enter(p, code) {
   if (code) { await p.fill('#room-code', code); await p.click('#join-room'); } else await p.click('#create-room');
-  await p.waitForFunction(() => !document.getElementById('click-to-play').disabled, null, { timeout: 120_000 });
+  // The button starts enabled before the game builds; wait for the gate to show and the textures to load.
+  await p.waitForFunction(() => !document.getElementById('play-gate').hidden && !document.getElementById('click-to-play').disabled, null, { timeout: 120_000 });
   await p.click('#click-to-play');
   await p.waitForSelector('#play-gate', { state: 'hidden', timeout: 15_000 });
   await p.waitForFunction(() => window.__THREE_GAME_DIAGNOSTICS__?.world?.position, null, { timeout: 60_000 });
