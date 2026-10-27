@@ -99,7 +99,46 @@ async function press(p, sel) {
   if (!await p.locator('#emote-wheel').isVisible()) await p.click('#open-emotes');
   const b = p.locator(`#emote-wheel ${sel}`);
   await b.waitFor({ state: 'visible', timeout: 5000 });
-  const t0 = Date.now(); await (p.isMobile ? b.tap() : b.click()); return t0;
+  // The clock starts at the button's own first input event in the page, not before Playwright's input wait (judge 1: under load
+  // Playwright alone took 526-699 ms before the event fired).
+  await b.evaluate(el => { window.__pressAt = null; const f = () => { window.__pressAt ??= Date.now(); };
+    for (const t of ['pointerdown', 'touchstart', 'mousedown', 'click']) el.addEventListener(t, f, { capture: true, once: true }); });
+  const before = Date.now(); await (p.isMobile ? b.tap() : b.click());
+  return (await p.evaluate(() => window.__pressAt)) ?? before;
+}
+// Put `q` at `front` blocks ahead of and `right` blocks to the right of `p`'s camera (flat, at `p`'s feet height).
+async function placeRel(p, q, front, right) {
+  const t = await p.evaluate(([f, r]) => {
+    const D = window.__THREE_GAME_DIAGNOSTICS__.debug, c = D.camera; c.updateMatrixWorld();
+    const d = c.getWorldDirection(c.position.clone()); d.y = 0; d.normalize();
+    const pl = D.player.position;
+    return [pl.x + d.x * f - d.z * r, pl.y, pl.z + d.z * f + d.x * r];   // right of forward (dx,0,dz) is (-dz,0,dx)
+  }, [front, right]);
+  await q.evaluate(([x, y, z]) => { window.__THREE_GAME_DIAGNOSTICS__.debug.player.position.set(x, y, z); }, t);
+}
+// Where the locator dot for `id` really is on `p`'s screen, and whether anything covers its centre.
+async function dot(p, id) {
+  return p.evaluate(id => {
+    const e = document.querySelector(`[data-locator="${id}"]`); if (!e) return null;
+    const r = e.getBoundingClientRect(), cs = getComputedStyle(e), cx = r.x + r.width / 2, cy = r.y + r.height / 2;
+    const top = Number.isFinite(cx) && Number.isFinite(cy) ? document.elementFromPoint(cx, cy) : null;
+    return { cx, cy, W: innerWidth, H: innerHeight, shown: cs.display !== 'none' && cs.visibility !== 'hidden' && +cs.opacity > 0 && r.width > 0,
+             onTop: !!top && (top === e || e.contains(top)), coveredBy: top && !(top === e || e.contains(top)) ? (top.id || top.tagName) : null };
+  }, id);
+}
+// The dot must be a usable pointer: shown, on screen, not stuck in the top-left corner, not under a button, and on the
+// friend's side. Behind = pushed out toward an edge (not mid-screen); to the right = right half.
+async function dotRight(n, p, id, where) {
+  const d = await dot(p, id);
+  assert.ok(d?.shown, `${n}: no shown locator dot when the friend is ${where}`);
+  assert.ok(Number.isFinite(d.cx) && Number.isFinite(d.cy) && d.cx >= 0 && d.cy >= 0 && d.cx <= d.W && d.cy <= d.H,
+    `${n}: friend ${where}: dot centre (${d.cx},${d.cy}) is off the ${d.W}x${d.H} screen`);
+  assert.ok(!(d.cx < 12 && d.cy < 12), `${n}: friend ${where}: dot stuck at the top-left corner (${d.cx},${d.cy})`);
+  assert.ok(d.onTop, `${n}: friend ${where}: dot at (${Math.round(d.cx)},${Math.round(d.cy)}) is covered by ${d.coveredBy}`);
+  if (where === 'behind') assert.ok(Math.hypot(d.cx - d.W / 2, d.cy - d.H / 2) >= 0.3 * Math.min(d.W, d.H),
+    `${n}: friend behind, but the dot is mid-screen at (${Math.round(d.cx)},${Math.round(d.cy)}), as if in front`);
+  if (where.startsWith('right') || where.startsWith('beside')) assert.ok(d.cx > d.W / 2,
+    `${n}: friend ${where}, but the dot is on the left half at x=${Math.round(d.cx)}`);
 }
 // Wait until `p` has drawn a new entry from `from` matching `id`; return it (or null after `ms`).
 async function sees(p, from, id, after0, ms = 3000) {
@@ -130,9 +169,15 @@ test('1. room-mates see an emote over the sender, and a ping, within 300 ms; eac
     assert.ok(box.width >= 48 && box.height >= 48, `${sel} is ${box.width}x${box.height} px on a 412x915 phone (want >= 48x48)`);
   }
   await b.keyboard.press('Escape');
-  for (const [n, p, m] of [['host', host, 'b'], ['b', b, 'host']]) {
-    assert.ok(await p.locator(`[data-locator="${ids[m]}"]`).isVisible(), `${n}: no visible locator dot for room-mate ${m}`);
+  // Locator dot, checked where it is drawn (judge 1: isVisible passed a dot mid-screen for a friend behind, one stuck
+  // top-left for a friend exactly beside, and one under the right-hand buttons).
+  for (const [where, f, r] of [['in front', 6, 0], ['behind', -8, 0], ['right, 10 blocks', 2, 10], ['beside, exactly right', 0, 4]]) {
+    await placeRel(host, b, f, r); await wait(2500);
+    await dotRight('host (laptop)', host, ids.b, where);
   }
+  await placeRel(b, host, 2, 10); await wait(2500);
+  await dotRight('b (phone)', b, ids.host, 'right, 10 blocks');
+  await besides(b, host, 4); await wait(2500);
   const lag = [];
   for (const [sender, sp, n, p, emote] of [['host', host, 'b', b, 'wave'], ['b', b, 'host', host, 'cheer'], ['host', host, 'b', b, 'dance']]) {
     const t0 = await press(sp, `[data-emote="${emote}"]`);
