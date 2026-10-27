@@ -26,7 +26,7 @@ export function meshChunkData({ data, cx, cz, width, height, depth }) {
   const strides=[1,strideY,strideZ];
   const occluders=new Uint8Array(data.length);
   for(let i=0;i<data.length;i++)occluders[i]=BLOCK_DEFS[data[i]]?.solid&&!BLOCK_DEFS[data[i]].transparent?1:0;
-  const positions = [], normals = [], uv = [], colors = [], ao = [], wetness = [], groups = [], indices = [], materialIndices = Array.from({ length: 16 }, () => []);
+  const positions = [], normals = [], uv = [], colors = [], ao = [], wetness = [], tiles = [], groups = [], indices = [], materialIndices = Array.from({ length: 16 }, () => []);
   let quads = 0, exposedFaces = 0;
   // Order preserves the existing top/bottom/side material contract.
   for (const [d, sign] of [[1,1],[1,-1],[0,1],[0,-1],[2,1],[2,-1]]) {
@@ -71,7 +71,7 @@ export function meshChunkData({ data, cx, cz, width, height, depth }) {
           // World-aligned UVs keep texture density constant after greedy merging.
           uv.push(d === 1 ? p[0] : d === 0 ? p[2] : p[0], d === 1 ? p[2] : p[1]);
           const level = cell.levels[order[c]], shade = .52 + level * .16;
-          ao.push(level); wetness.push(cell.wet); colors.push(shade, shade, shade);
+          ao.push(level); wetness.push(cell.wet); tiles.push(cell.material); colors.push(shade, shade, shade);
         });
         const out = materialIndices[cell.material];
         if (cell.levels[0] + cell.levels[2] > cell.levels[1] + cell.levels[3]) out.push(base,base+1,base+3,base+1,base+2,base+3);
@@ -81,10 +81,12 @@ export function meshChunkData({ data, cx, cz, width, height, depth }) {
       }
     }
   }
-  materialIndices.forEach((values, materialIndex) => {
-    if (!values.length) return;
+  // Glass (11) and water (15) go last so the opaque tiles form one run: the renderer draws them in one call.
+  for (const materialIndex of [0,1,2,3,4,5,6,7,8,9,10,12,13,14,11,15]) {
+    const values = materialIndices[materialIndex];
+    if (!values.length) continue;
     groups.push({ start: indices.length, count: values.length, materialIndex });
     for (const value of values) indices.push(value);
-  });
-  return { positions: new Float32Array(positions), normals: new Float32Array(normals), uv: new Float32Array(uv), colors: new Float32Array(colors), ao: new Uint8Array(ao), wetness:new Float32Array(wetness), indices: new Uint32Array(indices), groups, quads, exposedFaces };
+  }
+  return { positions: new Float32Array(positions), normals: new Float32Array(normals), uv: new Float32Array(uv), colors: new Float32Array(colors), ao: new Uint8Array(ao), wetness:new Float32Array(wetness), tiles:new Float32Array(tiles), indices: new Uint32Array(indices), groups, quads, exposedFaces };
 }

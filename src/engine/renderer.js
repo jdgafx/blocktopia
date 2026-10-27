@@ -40,11 +40,11 @@ export class Renderer {
     this.camera.position.set(0, 40, 0);
 
     this._setupLighting();
-    this._loadEnvironment();
+    this.environmentReady = this._loadEnvironment();
     this.setQuality(renderDistance > 4 ? 'high' : 'balanced');
     this._material = buildTerrainMaterials(this.renderer);
     this._water = new WaterSurface(this.renderer,this.camera);
-    this._material[15].dispose();this._material[15]=this._water.material;
+    this._chunkMaterial=[this._material.chunk[0]];this._clearMaterial=[this._material.chunk[1],this._water.material];
     this._material.ready.catch((error) => {
       console.warn(error.message);
       const status = document.getElementById('menu-status');
@@ -57,7 +57,7 @@ export class Renderer {
     this._wantedChunks = null;
     this.meshMetrics = { submitMs: 0, applyMs: 0, lastEditLatencyMs: 0 };
     window.addEventListener('pagehide',()=>{this._terrainJobs.dispose();this._water.dispose();},{once:true});
-    this._vegetation = new Vegetation(this._material.plain[5]);
+    this._vegetation = new Vegetation(this._material[5]);
     this._chunkVegetation = new Map();
     this._buildings = new Buildings(this._material);
     this._chunkBuildings = new Map();
@@ -96,16 +96,17 @@ export class Renderer {
     this._worldUp = new THREE.Vector3(0, 1, 0);
   }
 
+  // The environment must be in the scene before the first frame: changing scene.environment later
+  // changes every render object's cache key, and three then rebuilds them all in the middle of a frame.
   _loadEnvironment() {
     const pmrem = new PMREMGenerator(this.renderer);
-    const failed = () => { pmrem.dispose(); console.warn('Environment reflections unavailable; using sky and sunlight.'); };
-    new RGBELoader().load('/textures/environment.hdr', async (texture) => {
+    return new RGBELoader().loadAsync('/textures/environment.hdr').then(texture => {
       try {
-        this._environment = await pmrem.fromEquirectangularAsync(texture);
+        this._environment = pmrem.fromEquirectangular(texture);
         this.scene.environment = this._environment.texture;
-      } catch { failed(); return; } finally { texture.dispose(); }
-      pmrem.dispose();
-    }, undefined, failed); // Direct and sky lighting remain usable if the environment asset fails to load.
+      } finally { texture.dispose(); }
+      this._afterFrame = () => pmrem.dispose(); // WebGPU still holds the generator's uniform buffers until its commands are submitted
+    }).catch(() => { pmrem.dispose(); console.warn('Environment reflections unavailable; using sky and sunlight.'); }); // Direct and sky lighting remain usable if the environment asset fails to load.
   }
 
   setQuality(quality) {
@@ -210,9 +211,8 @@ export class Renderer {
       const oldBuilding=this._chunkBuildings.get(key);
       if(oldBuilding){this.scene.remove(oldBuilding);this._buildings.remove(oldBuilding);}
       const building=this._buildings.build(chunk);this.scene.add(building);this._chunkBuildings.set(key,building);
-      const old=this._chunkMeshes.get(key);if(old){this.scene.remove(old);old.geometry.dispose();}
-      const geo=geometryFromMesh(data), mesh=new THREE.Mesh(geo,this._material);
-      mesh.frustumCulled=true;mesh.castShadow=mesh.receiveShadow=true;
+      const old=this._chunkMeshes.get(key);if(old){this.scene.remove(old);this._disposeChunkMesh(old);}
+      const mesh=this._chunkMesh(geometryFromMesh(data));
       this.scene.add(mesh);this._chunkMeshes.set(key,mesh);
       this.meshMetrics.applyMs=performance.now()-applyStart;
       this.meshMetrics.lastEditLatencyMs=performance.now()-start;
@@ -253,10 +253,29 @@ export class Renderer {
     if (this._chunkMeshes.has(key)) {
       const mesh = this._chunkMeshes.get(key);
       this.scene.remove(mesh);
-      mesh.geometry.dispose();
+      this._disposeChunkMesh(mesh);
       this._chunkMeshes.delete(key);
     }
   }
+
+  // One Mesh for the opaque draw and a child for glass + water. three's shadow pass draws every group of a Mesh through one
+  // shared override material it re-configures per source material (transparent, side), so a Mesh that mixes opaque and
+  // see-through groups flips that render object's cache key mid-frame and three destroys buffers the frame still uses.
+  // The child does not cast shadows, so the shadow pass only ever sees the opaque group.
+  _chunkMesh(geo) {
+    const clearGeo = new THREE.BufferGeometry();
+    clearGeo.attributes = geo.attributes; clearGeo.index = geo.index; clearGeo.boundingSphere = geo.boundingSphere;
+    const clearGroups = geo.groups.filter(g => g.materialIndex > 0);
+    for (const g of clearGroups) clearGeo.addGroup(g.start, g.count, g.materialIndex - 1);
+    geo.groups = geo.groups.filter(g => g.materialIndex === 0);
+    const mesh = new THREE.Mesh(geo, this._chunkMaterial), clear = new THREE.Mesh(clearGeo, this._clearMaterial);
+    mesh.frustumCulled = clear.frustumCulled = true;
+    mesh.castShadow = true; mesh.receiveShadow = clear.receiveShadow = true;
+    mesh.add(clear); mesh.userData.clear = clear;
+    return mesh;
+  }
+
+  _disposeChunkMesh(mesh) { mesh.geometry.dispose(); mesh.userData.clear.geometry.dispose(); }
 
   hasChunk(cx, cz) {
     return this._chunkMeshes.has(`${cx},${cz}`);
@@ -327,5 +346,6 @@ export class Renderer {
     this._updateRemotePlayers(performance.now());
     this._material.time.value=performance.now()/1000;
     this._water.render(this.scene,this._chunkMeshes,this._sunDirection,this.quality);
+    if (this._afterFrame) { const done = this._afterFrame; this._afterFrame = null; done(); }
   }
 }

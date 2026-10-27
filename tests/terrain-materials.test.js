@@ -36,8 +36,12 @@ it('loads verified local scans with correct PBR color spaces, mip filters and sh
   for (const index of [0,1,2,3,4,5,6,7,8,9,10]) {
     expect(materials[index].aoMap).toBe(materials[index].roughnessMap);
     expect(materials[index].metalnessMap).toBe(materials[index].roughnessMap);
-    expect(materials[index].vertexColors).toBe(true);
+    expect(materials[index].vertexColors).toBe(false);
   }
+  const [opaque, glass] = materials.chunk;
+  expect(opaque.vertexColors).toBe(true);
+  expect(glass.transparent).toBe(true);
+  expect(opaque.colorNode).toBeTruthy();
   const provenance = JSON.parse(readFileSync(new URL('../public/textures/pbr/provenance.json', import.meta.url)));
   expect(provenance.sources).toHaveLength(24);
   for (const source of provenance.sources) {

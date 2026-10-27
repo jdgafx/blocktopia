@@ -32,7 +32,7 @@ export class WaterSurface {
   }
   render(scene,meshes,sun,quality){
     this.camera.updateMatrixWorld();this.matrix.multiplyMatrices(this.camera.projectionMatrix,this.camera.matrixWorldInverse);this.frustum.setFromProjectionMatrix(this.matrix);
-    const visible=[...meshes.values()].some(mesh=>mesh.geometry.groups.some(group=>group.materialIndex===15)&&this.frustum.intersectsObject(mesh));
+    const visible=[...meshes.values()].some(mesh=>mesh.userData.clear.geometry.groups.some(group=>group.materialIndex===1)&&this.frustum.intersectsObject(mesh));
     if(!visible){this.renderer.render(scene,this.camera);return;}
     this.renderer.getDrawingBufferSize(this.size);
     const scale=quality==='high'?1:.65,w=Math.max(1,Math.round(this.size.x*scale)),h=Math.max(1,Math.round(this.size.y*scale));

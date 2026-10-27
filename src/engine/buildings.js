@@ -178,8 +178,8 @@ function partGeometry(p) {
 
 export class Buildings {
   constructor(terrainSet) {
-    // The plain set has no wetness or vertex colour: cottage parts carry neither attribute.
-    const terrain = terrainSet.plain ?? terrainSet;
+    // Cottage parts carry no vertex colour or wetness attribute: the per-tile set reads neither.
+    const terrain = terrainSet;
     const wood = (name, color) => {
       const material = terrain[9].clone(); material.name = name; material.color.set(color);
       material.roughnessMap = null; material.roughness = .94;

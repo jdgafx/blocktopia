@@ -221,7 +221,7 @@ async function startGame(room) {
   };
   autoQuality.enabled=qualityControl.value==='auto';
   applyQuality(autoQuality.enabled?QUALITY_LEVELS[autoQuality.level]:qualityControl.value);
-  if(import.meta.env.DEV||new URLSearchParams(location.search).has('diagnostics'))window.__THREE_GAME_DIAGNOSTICS__={get debug(){return {world,player,camera:renderer.camera,scene:renderer.scene};},renderer:renderer.renderer.info,three:REVISION,get backend(){return renderer.renderer.backend.isWebGPUBackend?'webgpu':'webgl2';},async gpuMs(){await renderer.renderer.resolveTimestampsAsync('render');let t=0;for(const v of renderer.renderer.backend.timestampQueryPool.render.timestamps.values())t+=v;return t;},terrain:renderer.meshMetrics,workers:renderer._terrainJobs.metrics,get quality(){return renderer.quality;},get isolated(){return crossOriginIsolated;},get world(){return {seed:world.seed,generation:world.generation,position:player?.position.toArray(),edits:[...world.edits].map(([key,values])=>[key,[...values]]),chunks:world.chunks.size,meshes:renderer._chunkMeshes.size,pending:renderer._chunkJobs.size};},get avatars(){return [...renderer._remoteAvatars.values()].map(a=>({position:a.position.toArray(),meshes:(()=>{let n=0;a.traverse(p=>{if(p.isMesh)n++;});return n;})()}));},get waters(){const points=[];for(const c of world.chunks.values()){for(let z=0;z<16;z++)for(let x=0;x<16;x++)if(c.getBlock(x,21,z)===14){points.push([c.cx*16+x,22,c.cz*16+z]);if(points.length===12)return points;}}return points;}};
+  if(import.meta.env.DEV||new URLSearchParams(location.search).has('diagnostics'))window.__THREE_GAME_DIAGNOSTICS__={get startup(){return startup;},get debug(){return {world,player,camera:renderer.camera,scene:renderer.scene};},renderer:renderer.renderer.info,three:REVISION,get backend(){return renderer.renderer.backend.isWebGPUBackend?'webgpu':'webgl2';},async gpuMs(){if(renderer.renderer.backend.timestampQueryPool)await renderer.renderer.resolveTimestampsAsync("render");let t=0;for(const v of renderer.renderer.backend.timestampQueryPool?.render?.timestamps.values()??[])t+=v;return t;},terrain:renderer.meshMetrics,workers:renderer._terrainJobs.metrics,get quality(){return renderer.quality;},get isolated(){return crossOriginIsolated;},get world(){return {seed:world.seed,generation:world.generation,position:player?.position.toArray(),edits:[...world.edits].map(([key,values])=>[key,[...values]]),chunks:world.chunks.size,meshes:renderer._chunkMeshes.size,pending:renderer._chunkJobs.size};},get avatars(){return [...renderer._remoteAvatars.values()].map(a=>({position:a.position.toArray(),meshes:(()=>{let n=0;a.traverse(p=>{if(p.isMesh)n++;});return n;})()}));},get waters(){const points=[];for(const c of world.chunks.values()){for(let z=0;z<16;z++)for(let x=0;x<16;x++)if(c.getBlock(x,21,z)===14){points.push([c.cx*16+x,22,c.cz*16+z]);if(points.length===12)return points;}}return points;}};
   const lightingControl = document.getElementById('scene-lighting');
   const brightnessControl = document.getElementById('scene-brightness');
   try {
@@ -239,7 +239,7 @@ async function startGame(room) {
   brightnessControl.addEventListener('input', applyLighting);
   applyLighting();
   player = new Player(world, renderer.camera);
-  firstPerson = new FirstPerson(renderer.camera, renderer.scene, renderer._material.plain);
+  firstPerson = new FirstPerson(renderer.camera, renderer.scene, renderer._material);
   const creatures = new CreatureVisuals(world, renderer.scene);
   const creatureAudio = new CreatureAudio();
   const creatureSystem = session.creatureSystem = new CreatureSession(session, world, account.user.id);
@@ -270,6 +270,7 @@ async function startGame(room) {
   document.getElementById('invite-url').value = invite.href;
 
 
+  let startup = null;
   const changedChunks = new Set();
   let remeshQueued = false;
   function remeshChunk(cx, cz) {
@@ -361,7 +362,13 @@ async function startGame(room) {
     remeshAt(commit.x, commit.y, commit.z);
   }
 
-  Promise.all([renderer.avatarReady, renderer._material.ready, renderer._vegetation.ready, characters?.animalSkins.ready, characters?.ready, creatures.ready, creatureSystem.readyPromise, ...initialTerrain]).then(() => {
+  Promise.all([renderer.environmentReady, renderer.avatarReady, renderer._material.ready, renderer._vegetation.ready, characters?.animalSkins.ready, characters?.ready, creatures.ready, creatureSystem.readyPromise, ...initialTerrain]).then(async () => {
+    // Build the main-pass shaders (async, off the render loop) and the shadow-pass ones (one render) before the first frame.
+    const t0 = performance.now();
+    await renderer.renderer.compileAsync(renderer.scene, renderer.camera);
+    const t1 = performance.now();
+    renderer.render();
+    startup = { compileMs: Math.round(t1 - t0), firstRenderMs: Math.round(performance.now() - t1) };
     lastTime = performance.now();
     loop();
     document.getElementById('room-gate').classList.add('in-world');

@@ -210,6 +210,7 @@ function pageHarness({ code, quality, seed }) {
     const info = diag().renderer, T = S.turn;
     let q = null;
     if (T) { T.frames++; if (S.ext && !diag().gpuMs) { q = S.gl.createQuery(); S.gl.beginQuery(S.ext.TIME_ELAPSED_EXT, q); } }
+    S.first = true; // each callback's first clock read is the exact frame time (three's own frame callback runs before the game's)
     try {
       if (!measuring) return void cb(t);
       info.reset(); const t0 = realNow(); cb(t); const ms = realNow() - t0;
@@ -329,6 +330,7 @@ async function playCombo(profileName, backendName, urls, codes, plan) {
     // What each build really ran on: the engine revision and backend it reported, and the context type its canvas got.
     run.engine = { old: { three: o.engine.three, backend: o.engine.backend }, new: { three: n.engine.three, backend: n.engine.backend } };
     run.gameApi = { old: o.gpu.gameContext, new: n.gpu.gameContext };
+    run.startup = await n.p.evaluate(() => window.__THREE_GAME_DIAGNOSTICS__.startup); // shader build + first render before the loop, NEW only
     // A WebGL2 context must sit on the path the profile asked for (ANGLE over Vulkan or over OpenGL ES); a WebGPU context has no such string.
     for (const s of [o, n]) if (s.gpu.gameRenderer && !new RegExp(backendName === 'webgpu' ? 'vulkan' : 'opengl', 'i').test(s.gpu.gameRenderer) && s.engine.native)
       throw new Error(`${s.name}: the ${backendName} profile did not get its graphics path: the game's renderer is ${s.gpu.gameRenderer}`);
@@ -425,7 +427,7 @@ try {
     const run = await playCombo(profile, backend, urls, codes, { left: combos.length - runs.length, setupMs });
     if (run.setupMs) setupMs = Math.max(setupMs, run.setupMs);
     runs.push(run);
-    console.log(run.failed ? `  ${profile}/${backend} FAILED: ${run.failed}` : `  ${profile}/${backend} (${Math.round((Date.now() - t0) / 1000)} s): draw calls ${run.work.old.calls}/${run.work.new.calls}, triangles ${run.work.old.triangles}/${run.work.new.triangles}, frame work ${run.race.oldMs}/${run.race.newMs} ms, GPU ${run.race.oldGpuMs}/${run.race.newGpuMs} ms (old/new), ${run.race.rounds} rounds${run.videoError ? ` (video not saved: ${run.videoError})` : ''}`);
+    console.log(run.failed ? `  ${profile}/${backend} FAILED: ${run.failed}` : `  ${profile}/${backend} (${Math.round((Date.now() - t0) / 1000)} s): draw calls ${run.work.old.calls}/${run.work.new.calls}, triangles ${run.work.old.triangles}/${run.work.new.triangles}, frame work ${run.race.oldMs}/${run.race.newMs} ms, GPU ${run.race.oldGpuMs}/${run.race.newGpuMs} ms (old/new), ${run.startup ? `shader build ${run.startup.compileMs} ms + first render ${run.startup.firstRenderMs} ms before the first frame, ` : ''}${run.race.rounds} rounds${run.videoError ? ` (video not saved: ${run.videoError})` : ''}`);
   }
   mkdirSync(RESULTS, { recursive: true });
   writeFileSync(`${RESULTS}/latest.json`, JSON.stringify({ createdAt: new Date().toISOString(), oldRef: OLD_REF, runs }, null, 2));
