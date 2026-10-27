@@ -14,7 +14,7 @@ it('loads verified local scans with correct PBR color spaces, mip filters and sh
     queueMicrotask(() => { map.image = { width: 1024, height: 1024 }; loaded(map); });
     return map;
   });
-  const materials = buildTerrainMaterials({ capabilities: { getMaxAnisotropy: () => 16 } });
+  const materials = buildTerrainMaterials({ getMaxAnisotropy: () => 16 });
   for (const index of [1, 6]) expect(materials[index].map.version).toBe(0);
   await materials.ready;
   expect(materials).toHaveLength(16);
@@ -51,6 +51,6 @@ it('reports failed material requests instead of claiming textures loaded', async
     queueMicrotask(failed);
     return new THREE.Texture();
   });
-  const materials = buildTerrainMaterials({ capabilities: { getMaxAnisotropy: () => 1 } });
+  const materials = buildTerrainMaterials({ getMaxAnisotropy: () => 1 });
   await expect(materials.ready).rejects.toThrow('Texture unavailable: /textures/pbr/sparse_grass-color.jpg');
 });

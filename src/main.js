@@ -1,7 +1,7 @@
 import { AutoQuality, QUALITY_LEVELS } from './engine/auto-quality.js';
 import { decorateMenus } from './ui/icons.js';
 import './ui/menus.css';
-import { DefaultLoadingManager } from 'three';
+import { DefaultLoadingManager, REVISION } from 'three';
 import { hostedAssetUrl } from './engine/asset-urls.js';
 import { CreatureSession } from './network/creature-session.js';
 import { CreatureVisuals } from './game/creature-visuals.js';
@@ -206,10 +206,10 @@ function renderNetworkStatus() {
   networkStatus.title = `${role} | WebRTC ${lastNetwork.icePath}${failure}`;
 }
 
-function startGame(room) {
+async function startGame(room) {
   if (world) return;
   world = new World(room.seed, room.generation ?? 1);
-  renderer = new Renderer(document.getElementById('canvas'), renderDistance);
+  renderer = await Renderer.create(document.getElementById('canvas'), renderDistance);
   const autoQuality=new AutoQuality({cores:navigator.hardwareConcurrency,memory:navigator.deviceMemory,mobile:matchMedia('(pointer: coarse)').matches});
   const qualityControl=document.getElementById('graphics-quality');
   try{qualityControl.value=localStorage.getItem('blocktopia-quality')||'auto';}catch{}
@@ -221,7 +221,7 @@ function startGame(room) {
   };
   autoQuality.enabled=qualityControl.value==='auto';
   applyQuality(autoQuality.enabled?QUALITY_LEVELS[autoQuality.level]:qualityControl.value);
-  if(import.meta.env.DEV||new URLSearchParams(location.search).has('diagnostics'))window.__THREE_GAME_DIAGNOSTICS__={renderer:renderer.renderer.info,terrain:renderer.meshMetrics,workers:renderer._terrainJobs.metrics,get quality(){return renderer.quality;},get isolated(){return crossOriginIsolated;},get world(){return {seed:world.seed,generation:world.generation,position:player?.position.toArray(),edits:[...world.edits].map(([key,values])=>[key,[...values]]),chunks:world.chunks.size,meshes:renderer._chunkMeshes.size,pending:renderer._chunkJobs.size};},get avatars(){return [...renderer._remoteAvatars.values()].map(a=>({position:a.position.toArray(),meshes:(()=>{let n=0;a.traverse(p=>{if(p.isMesh)n++;});return n;})()}));},get waters(){const points=[];for(const c of world.chunks.values()){for(let z=0;z<16;z++)for(let x=0;x<16;x++)if(c.getBlock(x,21,z)===14){points.push([c.cx*16+x,22,c.cz*16+z]);if(points.length===12)return points;}}return points;}};
+  if(import.meta.env.DEV||new URLSearchParams(location.search).has('diagnostics'))window.__THREE_GAME_DIAGNOSTICS__={get debug(){return {world,player,camera:renderer.camera,scene:renderer.scene};},renderer:renderer.renderer.info,three:REVISION,get backend(){return renderer.renderer.backend.isWebGPUBackend?'webgpu':'webgl2';},async gpuMs(){await renderer.renderer.resolveTimestampsAsync('render');let t=0;for(const v of renderer.renderer.backend.timestampQueryPool.render.timestamps.values())t+=v;return t;},terrain:renderer.meshMetrics,workers:renderer._terrainJobs.metrics,get quality(){return renderer.quality;},get isolated(){return crossOriginIsolated;},get world(){return {seed:world.seed,generation:world.generation,position:player?.position.toArray(),edits:[...world.edits].map(([key,values])=>[key,[...values]]),chunks:world.chunks.size,meshes:renderer._chunkMeshes.size,pending:renderer._chunkJobs.size};},get avatars(){return [...renderer._remoteAvatars.values()].map(a=>({position:a.position.toArray(),meshes:(()=>{let n=0;a.traverse(p=>{if(p.isMesh)n++;});return n;})()}));},get waters(){const points=[];for(const c of world.chunks.values()){for(let z=0;z<16;z++)for(let x=0;x<16;x++)if(c.getBlock(x,21,z)===14){points.push([c.cx*16+x,22,c.cz*16+z]);if(points.length===12)return points;}}return points;}};
   const lightingControl = document.getElementById('scene-lighting');
   const brightnessControl = document.getElementById('scene-brightness');
   try {
@@ -239,7 +239,7 @@ function startGame(room) {
   brightnessControl.addEventListener('input', applyLighting);
   applyLighting();
   player = new Player(world, renderer.camera);
-  firstPerson = new FirstPerson(renderer.camera, renderer.scene, renderer._material);
+  firstPerson = new FirstPerson(renderer.camera, renderer.scene, renderer._material.plain);
   const creatures = new CreatureVisuals(world, renderer.scene);
   const creatureAudio = new CreatureAudio();
   const creatureSystem = session.creatureSystem = new CreatureSession(session, world, account.user.id);

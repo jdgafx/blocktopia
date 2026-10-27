@@ -21,6 +21,6 @@ export function configureCharacterRenderer(renderer) {
 }
 
 export function characterLoader() {
-  if (!loader) throw new Error('Configure the character loader with the active WebGLRenderer before loading avatars.');
+  if (!loader) throw new Error('Configure the character loader with the initialised renderer before loading avatars.');
   return loader;
 }

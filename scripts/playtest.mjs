@@ -129,7 +129,15 @@ function exportOld() {
   try { execFileSync('git', ['rev-parse', '--verify', '--quiet', `${OLD_REF}^{commit}`], { stdio: 'ignore' }); } catch { throw new Error(`PLAYTEST_OLD_REF=${OLD_REF} is not a git commit or branch here.`); }
   const dir = mkdtempSync(join(tmpdir(), 'bt-old-')); temps.push(dir);
   execFileSync('sh', ['-c', `git archive "$0" | tar -x -C "$1"`, OLD_REF, dir]);
-  symlinkSync(realpathSync('node_modules'), join(dir, 'node_modules'));
+  // OLD must run its own three (the one its lockfile pins), not NEW's: install it from the npm cache, no network.
+  try { execFileSync('npm', ['ci', '--offline', '--no-audit', '--no-fund', '--silent'], { cwd: dir, stdio: 'ignore' }); }
+  catch { symlinkSync(realpathSync('node_modules'), join(dir, 'node_modules')); console.log('  note: OLD could not be installed offline; it builds against the working tree\'s node_modules (its three is then NOT its own)'); }
+  // Old mains have no `debug` hook in the diagnostics object; the shots need the camera, player and scene. Added to OLD's temp copy only.
+  const main = join(dir, 'src/main.js'), src = readFileSync(main, 'utf8'), hook = 'window.__THREE_GAME_DIAGNOSTICS__={';
+  if (!src.includes('get debug()')) {
+    if (!src.includes(hook)) throw new Error(`OLD (${OLD_REF}) src/main.js has no diagnostics object to hang the camera hook on`);
+    writeFileSync(main, src.replace(hook, `${hook}get debug(){return {world,player,camera:renderer.camera,scene:renderer.scene};},`));
+  }
   return dir;
 }
 
@@ -183,11 +191,31 @@ function pageHarness({ code, quality, seed }) {
     return true;
   }
   let FRAMES_PER_TURN = 90;
+  // GPU time. A build with its own timestamp queries (diag.gpuMs, the WebGPU renderer on either backend) is read as it is. A build without
+  // them (the old WebGL renderer) gets one EXT_disjoint_timer_query_webgl2 query round each game frame, begun before and ended after the timed
+  // span, so the CPU numbers are not touched. Both sum the GPU time of every pass in the turn; the node side divides by game frames.
+  S.qs = [];
+  S.gpuOld = async () => {
+    const { gl, ext } = S; let ns = 0, bad = false;
+    for (const q of S.qs) {
+      const end = realNow() + 3000;
+      while (!gl.getQueryParameter(q, gl.QUERY_RESULT_AVAILABLE) && realNow() < end) await new Promise(r => setTimeout(r, 5));
+      if (gl.getQueryParameter(q, gl.QUERY_RESULT_AVAILABLE)) ns += gl.getQueryParameter(q, gl.QUERY_RESULT); else bad = true;
+      gl.deleteQuery(q);
+    }
+    S.qs = [];
+    return bad || gl.getParameter(ext.GPU_DISJOINT_EXT) ? null : ns / 1e6;
+  };
   const run = (cb, t, measuring) => {
-    const info = diag().renderer;
-    if (!measuring) return void cb(t);
-    info.reset(); const t0 = realNow(); cb(t); const ms = realNow() - t0;
-    if (info.render.calls > 0 && S.turn && S.turn.ms.length < S.turn.want) { S.turn.ms.push(ms); S.turn.calls.push(info.render.calls); S.turn.tris.push(info.render.triangles); if (!document.hasFocus() || document.visibilityState !== 'visible') S.unfocused++; }
+    const info = diag().renderer, T = S.turn;
+    let q = null;
+    if (T) { T.frames++; if (S.ext && !diag().gpuMs) { q = S.gl.createQuery(); S.gl.beginQuery(S.ext.TIME_ELAPSED_EXT, q); } }
+    try {
+      if (!measuring) return void cb(t);
+      info.reset(); const t0 = realNow(); cb(t); const ms = realNow() - t0;
+      const draws = diag().gpuMs ? info.render.drawCalls : info.render.calls; // node renderer: render.calls counts render() calls and is never reset
+      if (draws > 0 && T && T.ms.length < T.want) { T.ms.push(ms); T.calls.push(draws); T.tris.push(info.render.triangles); if (!document.hasFocus() || document.visibilityState !== 'visible') S.unfocused++; }
+    } finally { if (q) { S.gl.endQuery(S.ext.TIME_ELAPSED_EXT); S.qs.push(q); } }
   };
   window.requestAnimationFrame = cb => realRAF(function tick(t) {
     if (S.mode === 'free') return cb(t);
@@ -196,7 +224,41 @@ function pageHarness({ code, quality, seed }) {
     if (S.turn && S.turn.ms.length >= S.turn.want) { S.turn.done?.(); S.turn = null; S.mode = 'paused'; S.useVirt = false; return void realRAF(tick); }
     run(cb, t, S.settled);
   });
-  S.runTurn = want => new Promise(done => { FRAMES_PER_TURN = want; S.turn = { want, ms: [], calls: [], tris: [], done: () => done({ ms: S.last.ms, calls: S.last.calls, tris: S.last.tris, unfocused: S.unfocused }) }; S.last = S.turn; if (!S.virt) S.virt = S.virt0 = realNow(); S.useVirt = true; S.mode = 'measure'; });
+  S.runTurn = want => new Promise(done => { FRAMES_PER_TURN = want; S.qs = []; S.turn = { want, ms: [], calls: [], tris: [], frames: 0, done: () => done({ ms: S.last.ms, calls: S.last.calls, tris: S.last.tris, frames: S.last.frames, unfocused: S.unfocused }) }; S.last = S.turn; if (!S.virt) S.virt = S.virt0 = realNow(); S.useVirt = true; S.mode = 'measure'; });
+
+  // ---- colour shots: same camera in every build; the game runs on its real clock for these (S.mode 'free') ----
+  const raf = n => new Promise(r => { const go = () => n-- > 0 ? realRAF(go) : r(); go(); });
+  const D = () => diag().debug;
+  const release = () => { for (const c of ['KeyW', 'KeyS', 'Space']) key('keyup', c); mouse('mouseup', 0); mouse('mouseup', 2); };
+  const place = async (x, z, yaw, pitch) => { // stand on the ground at (x, z), looking yaw/pitch, and let the player land and the view settle
+    S.mode = 'free'; S.useVirt = false; release();
+    const { world, player } = D();
+    player.position.set(x, world.surfaceHeight(Math.floor(x), Math.floor(z)) + 1.2, z); player._yaw = yaw; player._pitch = pitch;
+    await raf(90);
+  };
+  const fragments = () => D().scene.children.filter(m => m.geometry?.parameters?.width === 0.075).length;
+  S.shot = async kind => {
+    const { world } = D();
+    if (kind === 'cottage') return place(18.5, 5.5, 0, 0); // hearthwood cottage, seen from the south
+    if (kind === 'trunk') { // the big tree nearest the spawn, from 3 m south
+      let best = null;
+      for (const c of world.chunks.values()) for (const t of c.trees ?? []) { const d = Math.hypot(t.x - 12, t.z - 12) - (t.width > 1 ? 8 : 0); if (!best || d < best.d) best = { t, d }; }
+      return place(best.t.x + best.t.width / 2, best.t.z + best.t.width + 2.5, 0, 0);
+    }
+    // debris: dig a 2-deep pit (the wall is then at eye height and half a metre away), break the wall block, freeze 2 frames after the pieces appear
+    const { player } = D(), x = 12.5, z = 12.5;
+    await place(x, z, 0, -Math.PI / 2);
+    for (let i = 0; i < 2; i++) {
+      const y0 = player.position.y; mouse('mousedown', 0);
+      for (let k = 0; k < 300 && player.position.y > y0 - 0.8; k++) await raf(1);
+      mouse('mouseup', 0); await raf(60); // fall, settle, the first pieces expire
+    }
+    player._pitch = 0; player._yaw = 0; await raf(10);
+    const before = fragments(); mouse('mousedown', 0);
+    for (let k = 0; k < 120 && fragments() <= before; k++) await raf(1);
+    await raf(2); S.mode = 'paused'; mouse('mouseup', 0);
+    return fragments() - before;
+  };
 }
 
 // ---- 4. one build in one browser context: sign in, start a world, then wait for turns ----
@@ -207,6 +269,7 @@ async function startSession(browser, name, url, profile, quality, code, backendN
   p.setDefaultTimeout(120000); // setup steps wait on a loaded host; the run's own time limit is the real bound
   const errors = [];
   p.on('pageerror', e => errors.push(e.message.slice(0, 200)));
+  p.on('console', m => { if (m.type() === 'error') errors.push(`console: ${m.text().slice(0, 200)}`); });
   if (phone) await (await ctx.newCDPSession(p)).send('Emulation.setCPUThrottlingRate', { rate: 4 });
   await p.addInitScript(pageHarness, { code, quality, seed: 1013 });
   await p.goto(`${url}/?diagnostics`, { waitUntil: 'load' });
@@ -230,10 +293,24 @@ async function startSession(browser, name, url, profile, quality, code, backendN
   if (SOFTWARE.test(JSON.stringify(gpu)) || gpu.adapter?.isFallbackAdapter) throw new Error(`software GPU in use: ${JSON.stringify(gpu)}`);
   if (backendName === 'webgpu' && !/intel/i.test(gpu.adapter?.vendor ?? '')) throw new Error(`WebGPU did not bind the Intel adapter: ${JSON.stringify(gpu)}`);
   if (!gpu.gameContext) throw new Error('the game never created a rendering context on its canvas');
-  if (backendName === 'webgl2' && gpu.gameContext !== 'webgl2') throw new Error(`forced WebGL2 profile, but the game rendered with ${gpu.gameContext}`);
+  // The game's own engine and backend. A build that reports gpuMs times itself (three's timestamp queries); an older one gets harness-side WebGL timer queries.
+  const engine = await p.evaluate(() => {
+    const d = window.__THREE_GAME_DIAGNOSTICS__, g = window.__game, S = window.__PT;
+    const native = typeof d.gpuMs === 'function';
+    const backend = d.backend ?? (g.type === 'webgl2' ? 'webgl2' : g.type);
+    if (!native) { // shortcut: harness timer queries wrap each whole frame callback, not only the draw calls; fine for a before/after on the same page
+      if (g.type !== 'webgl2') return { error: `no GPU timer for a ${g.type} context` };
+      S.gl = g.c; S.ext = g.c.getExtension('EXT_disjoint_timer_query_webgl2');
+      if (!S.ext) return { error: 'EXT_disjoint_timer_query_webgl2 is not available' };
+    }
+    return { three: String(window.__THREE__), backend, native };
+  });
+  if (engine.error) throw new Error(`${name}: ${engine.error}`);
+  if (engine.native && engine.backend !== backendName) throw new Error(`${name}: the ${backendName} profile ran the game on ${engine.backend}`);
+  if (!engine.native && backendName === 'webgpu') engine.backend = 'webgl2'; // an old WebGL-only build has nothing else to give on the webgpu profile
   const seed = await p.evaluate(() => window.__THREE_GAME_DIAGNOSTICS__.world.seed);
   await p.evaluate(() => { window.__PT.mode = 'paused'; }); // from here the page only runs during its own turn
-  return { name, ctx, p, gpu, seed, errors, video: p.video() };
+  return { name, ctx, p, gpu, engine, seed, errors, video: p.video() };
 }
 
 // ---- 5. one profile/backend: both builds alive, alternate turns ----
@@ -249,17 +326,26 @@ async function playCombo(profileName, backendName, urls, codes, plan) {
       startSession(browser, 'old', urls.old, profile, profile.quality, codes.old, backendName, videoDir),
       startSession(browser, 'new', urls.new, profile, profile.quality, codes.new, backendName, videoDir)]);
     run.gpu = n.gpu; run.seeds = { old: o.seed, new: n.seed };
-    // Honest label: the game only has a WebGL renderer. "webgpu" means Chrome's WebGPU/Vulkan stack on the Intel GPU (the adapter is checked
-    // above), with the game drawing through WebGL2 on ANGLE over Vulkan; "webgl2" is ANGLE over OpenGL ES. There is no WebGPU draw path to test.
-    run.gameApi = n.gpu.gameContext; run.gpuPath = backendName === 'webgpu' ? 'Vulkan (ANGLE)' : 'OpenGL ES (ANGLE)';
-    if (!new RegExp(backendName === 'webgpu' ? 'vulkan' : 'opengl', 'i').test(n.gpu.gameRenderer ?? '')) throw new Error(`the ${backendName} profile did not get its graphics path (${run.gpuPath}): the game's renderer is ${n.gpu.gameRenderer}`);
+    // What each build really ran on: the engine revision and backend it reported, and the context type its canvas got.
+    run.engine = { old: { three: o.engine.three, backend: o.engine.backend }, new: { three: n.engine.three, backend: n.engine.backend } };
+    run.gameApi = { old: o.gpu.gameContext, new: n.gpu.gameContext };
+    // A WebGL2 context must sit on the path the profile asked for (ANGLE over Vulkan or over OpenGL ES); a WebGPU context has no such string.
+    for (const s of [o, n]) if (s.gpu.gameRenderer && !new RegExp(backendName === 'webgpu' ? 'vulkan' : 'opengl', 'i').test(s.gpu.gameRenderer) && s.engine.native)
+      throw new Error(`${s.name}: the ${backendName} profile did not get its graphics path: the game's renderer is ${s.gpu.gameRenderer}`);
     const turns = { old: [], new: [] };
     // Run length does not depend on host load: this run's share of the time left (minus the setup the later runs still need) sets how many
     // rounds it plays, from MIN_ROUNDS up to ROUNDS. A turn is only cut off at the hard limit, never for being slow.
     const setupMs = Date.now() - t0;
     const share = Math.max(20_000, (T0 + MAX_MS - Date.now() - (plan.left - 1) * Math.max(setupMs, plan.setupMs)) / plan.left);
     const stopAt = Date.now() + share; const hardAt = T0 + MAX_MS + 30_000;
-    const guard = s => { const ms = Math.max(5000, hardAt - Date.now()); return Promise.race([s.p.evaluate(f => window.__PT.runTurn(f), FRAMES), sleep(ms).then(() => { throw new Error(`${s.name} build: the run's time limit passed (${Math.round(MAX_MS / 1000)} s) before a ${FRAMES}-frame turn ended`); })]); };
+    const guard = async s => {
+      const ms = Math.max(5000, hardAt - Date.now()), diagGpu = () => window.__THREE_GAME_DIAGNOSTICS__.gpuMs();
+      if (s.engine.native) await s.p.evaluate(diagGpu); // flush: only this turn's passes are read back afterwards
+      const x = await Promise.race([s.p.evaluate(f => window.__PT.runTurn(f), FRAMES), sleep(ms).then(() => { throw new Error(`${s.name} build: the run's time limit passed (${Math.round(MAX_MS / 1000)} s) before a ${FRAMES}-frame turn ended`); })]);
+      const total = await s.p.evaluate(s.engine.native ? diagGpu : () => window.__PT.gpuOld()); // GPU ms of every pass in the turn, per game frame below
+      x.gpuMs = total > 0 && x.frames ? total / x.frames : null;
+      return x;
+    };
     let rounds = 0;
     for (; rounds < ROUNDS && (rounds < MIN_ROUNDS || Date.now() < stopAt); rounds++) for (const s of [o, n]) turns[s.name].push(await guard(s)); // old, new, old, new ...
     run.setupMs = setupMs;
@@ -275,8 +361,23 @@ async function playCombo(profileName, backendName, urls, codes, plan) {
       turnCalls: { old: turns.old.map(x => mean(x.calls)), new: turns.new.map(x => mean(x.calls)) }, oldP25Ms: round(so.p25, 3), newP25Ms: round(sn.p25, 3),
       turnMs: { old: turns.old.map(x => round(median(x.ms), 2)), new: turns.new.map(x => round(median(x.ms), 2)) },
       pairRatioP50: round(median(turns.old.map((x, i) => median(x.ms.map((m, k) => turns.new[i].ms[k] / m)))), 3) };
+    // GPU time per game frame. A turn the timer could not read (a disjoint query, an empty pool) is left out, not counted as zero.
+    const gpu = t => t.map(x => x.gpuMs).filter(g => g > 0);
+    run.race.oldGpuMs = round(median(gpu(turns.old)), 3); run.race.newGpuMs = round(median(gpu(turns.new)), 3);
+    run.race.gpuTurns = { old: gpu(turns.old).map(g => round(g, 3)), new: gpu(turns.new).map(g => round(g, 3)) };
+    run.race.gpuPairRatioP50 = round(median(turns.old.flatMap((x, i) => x.gpuMs > 0 && turns.new[i].gpuMs > 0 ? [turns.new[i].gpuMs / x.gpuMs] : [])), 3);
+    run.race.gpuMethod = { old: o.engine.native ? 'three timestamp queries' : 'EXT_disjoint_timer_query_webgl2 around each frame', new: n.engine.native ? 'three timestamp queries' : 'EXT_disjoint_timer_query_webgl2 around each frame' };
+    // Colour shots: the same camera in both builds; cottage walls and roof, a tree trunk, and the pieces of a block just broken.
+    mkdirSync(`${RESULTS}/shots`, { recursive: true });
+    run.shots = { old: {}, new: {} };
+    for (const s of [o, n]) for (const kind of ['cottage', 'trunk', 'debris']) {
+      const path = `${RESULTS}/shots/${profileName}-${backendName}-${s.name}-${kind}.png`;
+      const info = await s.p.evaluate(k => window.__PT.shot(k), kind);
+      if (kind === 'debris' && !(info > 0)) throw new Error(`${s.name} build: breaking a block made no debris to photograph`);
+      await s.p.screenshot({ path }); run.shots[s.name][kind] = path;
+    }
     run.unfocusedFrames = (await o.p.evaluate(() => window.__PT.unfocused)) + (await n.p.evaluate(() => window.__PT.unfocused));
-    run.errors = [...o.errors, ...n.errors];
+    run.errors = [...o.errors, ...n.errors]; run.pageErrors = { old: o.errors, new: n.errors };
     mkdirSync(`${RESULTS}/videos`, { recursive: true });
     await Promise.all([o, n].map(s => s.ctx.close()));
     run.video = `${RESULTS}/videos/${profileName}-${backendName}.webm`;
@@ -318,13 +419,13 @@ try {
   const runs = [];
   const combos = Object.keys(PROFILES).flatMap(p => Object.keys(BACKENDS).map(b => [p, b])).filter(([p, b]) => !env.PLAYTEST_ONLY || env.PLAYTEST_ONLY === `${p}/${b}`); // filter is for dev, e.g. phone/webgl2
   let setupMs = 40_000; // guess until the first run has measured its own setup
-  console.log('  note: the game has only a WebGL renderer. "webgpu" = Chrome WebGPU/Vulkan stack on the Intel GPU, game drawn through WebGL2 over Vulkan; "webgl2" = WebGL2 over OpenGL ES.');
+  console.log('  note: "webgpu" = Chrome WebGPU on the Intel GPU (Vulkan); "webgl2" = WebGL2 over OpenGL ES. A build that cannot use WebGPU runs WebGL2 on both. OLD gets its GPU time from WebGL timer queries around each frame, NEW from three\'s timestamp queries; OLD\'s temp copy also gets a diagnostics-only camera hook.');
   for (const [profile, backend] of combos) {
     const t0 = Date.now();
     const run = await playCombo(profile, backend, urls, codes, { left: combos.length - runs.length, setupMs });
     if (run.setupMs) setupMs = Math.max(setupMs, run.setupMs);
     runs.push(run);
-    console.log(run.failed ? `  ${profile}/${backend} FAILED: ${run.failed}` : `  ${profile}/${backend} (${Math.round((Date.now() - t0) / 1000)} s): draw calls ${run.work.old.calls}/${run.work.new.calls}, triangles ${run.work.old.triangles}/${run.work.new.triangles}, frame work ${run.race.oldMs}/${run.race.newMs} ms (old/new), ${run.race.rounds} rounds${run.videoError ? ` (video not saved: ${run.videoError})` : ''}`);
+    console.log(run.failed ? `  ${profile}/${backend} FAILED: ${run.failed}` : `  ${profile}/${backend} (${Math.round((Date.now() - t0) / 1000)} s): draw calls ${run.work.old.calls}/${run.work.new.calls}, triangles ${run.work.old.triangles}/${run.work.new.triangles}, frame work ${run.race.oldMs}/${run.race.newMs} ms, GPU ${run.race.oldGpuMs}/${run.race.newGpuMs} ms (old/new), ${run.race.rounds} rounds${run.videoError ? ` (video not saved: ${run.videoError})` : ''}`);
   }
   mkdirSync(RESULTS, { recursive: true });
   writeFileSync(`${RESULTS}/latest.json`, JSON.stringify({ createdAt: new Date().toISOString(), oldRef: OLD_REF, runs }, null, 2));
@@ -337,6 +438,10 @@ try {
     for (const [label, a, b] of [['draw calls per frame', r.work.old.calls, r.work.new.calls], ['triangles per frame', r.work.old.triangles, r.work.new.triangles]])
       if (b > a * (1 + BUDGET)) problems.push(`${key}: ${label} ${a} -> ${b} (+${pct(a, b)}%)`);
     // Host load bursts hit one side's median (identical builds showed +30% there with p25 +3% and paired ratio 1.04), so a slowdown counts only when the median, the lower quartile and the paired per-frame ratio all show it.
+    // GPU time: the same rule on the GPU clock, so a slowdown that costs the GPU and not the CPU (a higher pixel ratio) is caught and named.
+    if (!(r.race.oldGpuMs > 0 && r.race.newGpuMs > 0)) problems.push(`${key}: GPU time could not be measured (old ${r.race.oldGpuMs}, new ${r.race.newGpuMs})`);
+    else if (r.race.newGpuMs > r.race.oldGpuMs * (1 + BUDGET) && r.race.gpuPairRatioP50 > 1 + BUDGET) problems.push(`${key}: GPU time ${r.race.oldGpuMs} ms -> ${r.race.newGpuMs} ms (+${pct(r.race.oldGpuMs, r.race.newGpuMs)}%)`);
+    if (r.pageErrors.new.length) problems.push(`${key}: page errors in NEW: ${r.pageErrors.new.slice(0, 3).join(' | ')}`);
     if (r.race.newMs > r.race.oldMs * (1 + BUDGET) && r.race.newP25Ms > r.race.oldP25Ms * (1 + BUDGET) && r.race.pairRatioP50 > 1 + BUDGET) problems.push(`${key}: frame work ${r.race.oldMs} ms -> ${r.race.newMs} ms (+${pct(r.race.oldMs, r.race.newMs)}%)`);
   }
   if (problems.length) { console.error(problems.join('\n')); verdict(false); exitCode = 1; }

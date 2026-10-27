@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { PMREMGenerator, WebGPURenderer } from 'three/webgpu';
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
 import { geometryFromMesh } from './mesher.js';
 import { snapshotChunk } from './mesh-data.js';
@@ -14,8 +15,16 @@ import { createSky, updateSky } from './sky.js';
 import { INTERPOLATION_DELAY_MS, interpolateSamples } from '../network/protocol.js';
 
 export class Renderer {
-  constructor(canvas, renderDistance = 4) {
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+  // WebGPURenderer picks WebGPU, or WebGL2 by itself; it must finish init() before textures, PMREM or KTX2 touch it.
+  static async create(canvas, renderDistance = 4) {
+    const diagnostics = import.meta.env.DEV || new URLSearchParams(location.search).has('diagnostics');
+    const gpu = new WebGPURenderer({ canvas, antialias: true, powerPreference: 'high-performance', trackTimestamp: diagnostics });
+    await gpu.init();
+    return new Renderer(gpu, renderDistance);
+  }
+
+  constructor(gpu, renderDistance = 4) {
+    this.renderer = gpu;
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -48,7 +57,7 @@ export class Renderer {
     this._wantedChunks = null;
     this.meshMetrics = { submitMs: 0, applyMs: 0, lastEditLatencyMs: 0 };
     window.addEventListener('pagehide',()=>{this._terrainJobs.dispose();this._water.dispose();},{once:true});
-    this._vegetation = new Vegetation(this._material[5]);
+    this._vegetation = new Vegetation(this._material.plain[5]);
     this._chunkVegetation = new Map();
     this._buildings = new Buildings(this._material);
     this._chunkBuildings = new Map();
@@ -88,21 +97,15 @@ export class Renderer {
   }
 
   _loadEnvironment() {
-    const pmrem = new THREE.PMREMGenerator(this.renderer);
-    pmrem.compileEquirectangularShader();
-    new RGBELoader().load('/textures/environment.hdr', (texture) => {
+    const pmrem = new PMREMGenerator(this.renderer);
+    const failed = () => { pmrem.dispose(); console.warn('Environment reflections unavailable; using sky and sunlight.'); };
+    new RGBELoader().load('/textures/environment.hdr', async (texture) => {
       try {
-        this._environment = pmrem.fromEquirectangular(texture);
+        this._environment = await pmrem.fromEquirectangularAsync(texture);
         this.scene.environment = this._environment.texture;
-      } finally {
-        texture.dispose();
-        pmrem.dispose();
-      }
-    }, undefined, () => {
+      } catch { failed(); return; } finally { texture.dispose(); }
       pmrem.dispose();
-      // Direct and sky lighting remain usable if the environment asset fails to load.
-      console.warn('Environment reflections unavailable; using sky and sunlight.');
-    });
+    }, undefined, failed); // Direct and sky lighting remain usable if the environment asset fails to load.
   }
 
   setQuality(quality) {

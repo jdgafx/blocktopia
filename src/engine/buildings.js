@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { dot, materialColor, mix, vec3, vec4 } from 'three/tsl';
 import { BLOCKS } from '../constants/blocks.js';
 
 // Each part stays inside its editable source cell. Render, collision and targeting share it.
@@ -176,14 +177,14 @@ function partGeometry(p) {
 }
 
 export class Buildings {
-  constructor(terrain) {
+  constructor(terrainSet) {
+    // The plain set has no wetness or vertex colour: cottage parts carry neither attribute.
+    const terrain = terrainSet.plain ?? terrainSet;
     const wood = (name, color) => {
       const material = terrain[9].clone(); material.name = name; material.color.set(color);
       material.roughnessMap = null; material.roughness = .94;
-      material.onBeforeCompile = shader => { shader.fragmentShader = shader.fragmentShader.replace('#include <map_fragment>', `
-        #include <map_fragment>
-        float grain = dot(diffuseColor.rgb, vec3(.2126, .7152, .0722));
-        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(grain) * vec3(1.08, 1.02, .9), .8);`); };
+      const grain = dot(materialColor.rgb, vec3(.2126, .7152, .0722));
+      material.colorNode = vec4(mix(materialColor.rgb, vec3(grain).mul(vec3(1.08, 1.02, .9)), .8), materialColor.a);
       return material;
     };
     const stone = terrain[3].clone(); stone.color.set(0x9c9789);

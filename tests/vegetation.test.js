@@ -36,7 +36,6 @@ it('builds bounded instanced foliage and removes tree visuals when committed tim
     expect(foliage.count).toBeGreaterThan(1000);
     expect(foliage.count).toBeLessThan(10000);
     expect(foliage.material.alphaTest).toBe(.45);
-    expect(foliage.customDepthMaterial.alphaTest).toBe(.45);
     expect([...foliage.instanceMatrix.array].every(Number.isFinite)).toBe(true);
     const matrices = foliage.instanceMatrix, fullCount = foliage.count;
     const geometry = before.children.find(mesh => !mesh.isInstancedMesh).geometry;

@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { MeshStandardNodeMaterial } from 'three/webgpu';
+import { positionLocal, sin, uniform, uv, vec3 } from 'three/tsl';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { BLOCKS } from '../constants/blocks.js';
 
@@ -40,20 +42,13 @@ export class Vegetation {
       rejectLeaf(new Error('Leaf textures could not load'));
     });
     map.colorSpace = THREE.SRGBColorSpace; map.anisotropy = 4;
-    this.leafMaterial = new THREE.MeshStandardMaterial({ name: 'Living oak foliage', map, alphaTest: .45,
+    this.leafMaterial = new MeshStandardNodeMaterial({ name: 'Living oak foliage', map, alphaTest: .45,
       side: THREE.DoubleSide, roughness: .85, metalness: 0, alphaToCoverage: true });
-    this.leafDepth = new THREE.MeshDepthMaterial({ map, alphaTest: .45, side: THREE.DoubleSide, depthPacking: THREE.RGBADepthPacking });
-    this.wind = { value: 0 };
-    for (const material of [this.leafMaterial, this.leafDepth]) material.onBeforeCompile = shader => {
-      shader.uniforms.vegetationTime = this.wind;
-      shader.vertexShader = `uniform float vegetationTime;\n${shader.vertexShader}`.replace('#include <begin_vertex>', `
-        #include <begin_vertex>
-        #ifdef USE_INSTANCING
-          float phase = instanceMatrix[3].x * .37 + instanceMatrix[3].z * .29;
-          transformed.x += sin(vegetationTime * 1.35 + phase) * .065 * uv.y;
-          transformed.z += sin(vegetationTime * .83 + phase) * .035 * uv.y;
-        #endif`);
-    };
+    this.wind = uniform(0);
+    // Runs after instancing, so the sway is in world axes; shortcut: phase comes from the vertex, not the instance origin.
+    const phase = positionLocal.x.mul(.37).add(positionLocal.z.mul(.29));
+    this.leafMaterial.positionNode = positionLocal.add(vec3(
+      sin(this.wind.mul(1.35).add(phase)).mul(.065).mul(uv().y), 0, sin(this.wind.mul(.83).add(phase)).mul(.035).mul(uv().y)));
   }
 
   build(chunk, world, camera = { x: 8, z: 12 }) {
@@ -132,7 +127,7 @@ export class Vegetation {
       batch.forEach((entry, index) => { mesh.setMatrixAt(index, entry.matrix); mesh.setColorAt(index, entry.color); });
       mesh.instanceMatrix.needsUpdate = true; mesh.instanceColor.needsUpdate = true;
       mesh.userData.fullCount = batch.length; mesh.userData.herbs = !shadow;
-      mesh.castShadow = shadow; mesh.receiveShadow = true; mesh.customDepthMaterial = this.leafDepth;
+      mesh.castShadow = shadow; mesh.receiveShadow = true;
       mesh.computeBoundingSphere(); group.add(mesh);
     }
     this.setLod(group, camera);
