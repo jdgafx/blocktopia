@@ -1,7 +1,7 @@
 // blocktopia:T-027 check (replaces the T-017 check; same emote, quiet and no-text tests): the friend-locator dot is placed
 // from the real screen and HUD layout. blocktopia:T-017 check: emotes and pings. Players say "wave", "come here" and so on without any words typed;
 // room-mates see it over the sender within 300 ms; a quiet switch hides others' emotes; no text can get through.
-// Run: node --test tests/checks/t-017-emotes.check.mjs   Needs Docker + local Supabase (`npm run play` once) and Chrome.
+// Run: node --test tests/checks/t-027-locator.check.mjs   Needs Docker + local Supabase (`npm run play` once) and Chrome.
 // Real build of this tree, real browsers, real WebRTC room, real local DB. Local database only.
 //
 // INTERFACE the worker builds (only under ?diagnostics, like __THREE_GAME_DIAGNOSTICS__):
@@ -63,8 +63,8 @@ const pos = p => p.evaluate(() => window.__THREE_GAME_DIAGNOSTICS__.debug.player
 const dist3 = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 const visible = (p, id) => p.evaluate(id => { let o = window.__THREE_GAME_DIAGNOSTICS__.debug.scene.getObjectByProperty('uuid', id); if (!o) return false; for (; o; o = o.parent) if (!o.visible) return false; return true; }, id);
 
-async function player(who, { phone = false } = {}) {
-  const ctx = await browser.newContext(phone ? { viewport: { width: 412, height: 915 }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 } : { viewport: { width: 1280, height: 720 } });
+async function player(who, { phone = false, viewport } = {}) {
+  const ctx = await browser.newContext(phone ? { viewport: viewport ?? { width: 412, height: 915 }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 } : { viewport: { width: 1280, height: 720 } });
   await ctx.addInitScript(() => { try { localStorage.setItem('blocktopia-mouse-mode', 'cursor'); } catch {} }); const p = await ctx.newPage(); p.setDefaultTimeout(120_000); p.on('pageerror', e => console.log('PAGEERR', who, e.message.slice(0, 300))); p.on('console', m => { if (m.type() === 'error') console.log('CONSOLE', who, m.text().slice(0, 300)); });
   await p.goto(`${URL0}/?diagnostics`, { waitUntil: 'load' });
   await signIn(p, who);
@@ -260,4 +260,38 @@ test('3. no text path: the wheel has no text box, and forged text or unknown ids
     assert.deepEqual(bad, [], `${n} drew forged messages from ${sender}: ${JSON.stringify(bad)}`);
     assert.ok(!(await p.evaluate(() => document.body.innerText)).includes(FORGED), `${n}'s page shows the forged text sent by ${sender}`);
   }
+});
+
+// Phone held sideways, a fresh phone per size (judge 1: a rotation in emulation left the page 915 px wide). On every size the
+// HUD fits the real screen: every right-hand button and touch control is shown and fully on screen, none covers the aim
+// cross, and none covers another (judge 1: a second column fixed at right:176px covered the cross at 667x375 and 568x320;
+// Menu, Camp and Journal sat on Jump, Break and Place on every sideways size).
+const MUST = ['game-menu', 'open-camp', 'open-journal', 'game-controls', 'open-creatures', 'open-emotes', 'btn-jump', 'btn-break', 'btn-place', 'joystick-zone'];
+test('4. sideways phones: every HUD button on screen, none over the aim cross, a touch control or another button', { timeout: 900_000 }, async () => {
+  const bad = [];
+  for (const [W, H] of [[915, 412], [844, 390], [740, 360], [667, 375], [568, 320]]) {
+    const p = await player('side', { phone: true, viewport: { width: W, height: H } }); p.isMobile = true;
+    await enter(p);
+    const lay = await p.evaluate(() => {
+      const vis = e => { const r = e.getBoundingClientRect(), s = getComputedStyle(e); return r.width > 0 && r.height > 0 && s.display !== 'none' && s.visibility !== 'hidden' && +s.opacity > 0 && !e.closest('[hidden]'); };
+      const all = [...new Set(document.querySelectorAll('#hud button, #touch-controls button, #joystick-zone, #open-emotes'))].filter(vis);
+      const ctl = all.filter(e => !all.some(o => o !== e && o.contains(e)));
+      const box = e => { const r = e.getBoundingClientRect(); return { id: e.id || e.getAttribute('aria-label') || e.textContent.trim().slice(0, 20) || e.tagName, x: r.x, y: r.y, r: r.right, b: r.bottom }; };
+      const c = document.getElementById('crosshair');
+      return { W: innerWidth, H: innerHeight, ctl: ctl.map(box), cross: c && vis(c) ? box(c) : null };
+    });
+    const at = `${W}x${H} (page ${lay.W}x${lay.H})`;
+    const hit = (a, q) => a.x < q.r - 1 && a.r > q.x + 1 && a.y < q.b - 1 && a.b > q.y + 1;
+    const fmt = q => `${q.id} [${Math.round(q.x)},${Math.round(q.y)},${Math.round(q.r)},${Math.round(q.b)}]`;
+    if (!lay.cross) bad.push(`${at}: no aim cross shown`);
+    for (const id of MUST) if (!lay.ctl.some(q => q.id === id)) bad.push(`${at}: #${id} is not shown`);
+    for (const q of lay.ctl) {
+      if (q.x < 0 || q.y < 0 || q.r > lay.W || q.b > lay.H) bad.push(`${at}: ${fmt(q)} is not fully on screen`);
+      if (lay.cross && hit(q, lay.cross)) bad.push(`${at}: ${fmt(q)} covers the aim cross ${fmt(lay.cross)}`);
+    }
+    for (let i = 0; i < lay.ctl.length; i++) for (let j = i + 1; j < lay.ctl.length; j++)
+      if (hit(lay.ctl[i], lay.ctl[j])) bad.push(`${at}: ${fmt(lay.ctl[i])} covers ${fmt(lay.ctl[j])}`);
+    await p.context().close();
+  }
+  assert.deepEqual(bad, [], `sideways HUD:\n${bad.join('\n')}`);
 });
