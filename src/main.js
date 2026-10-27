@@ -20,6 +20,7 @@ import { FirstPerson } from './game/first-person.js';
 import { initAdventure } from './ui/adventure.js';
 import { initAccount } from './ui/account.js';
 import { MultiplayerSession } from './network/session.js';
+import { initEmotes } from './ui/emotes.js';
 
 DefaultLoadingManager.setURLModifier(url => hostedAssetUrl(url, location.hostname));
 
@@ -72,6 +73,7 @@ let refreshWorld;
 let adventure;
 let firstPerson;
 let creatureUI;
+let emotes;
 let creatureDirtyAt = 0;
 let lastNetwork = { roomCode: '', role: '', playerCount: 0, icePath: 'connecting' };
 const pendingMutations = [];
@@ -112,6 +114,7 @@ const session = new MultiplayerSession({
     document.getElementById('camp-feedback').textContent = reason;
     document.getElementById('menu-status').textContent = reason;
   },
+  onSocial: (message) => emotes?.receive(message),
   onMovement: (id, sample) => renderer?.updateRemotePlayer(id, sample),
   onPeerLeft: (id) => renderer?.removeRemotePlayer(id),
   onPlayers: (members) => {
@@ -256,6 +259,7 @@ async function startGame(room) {
   refreshCamp();
   expeditions.begin(room);
   initTouchControls(player);
+  emotes = initEmotes(session, player, renderer, { diagnostics: import.meta.env.DEV || new URLSearchParams(location.search).has('diagnostics') });
   document.getElementById('hud').hidden = false;
   lobby.hidden = true;
   const playButton = document.getElementById('click-to-play');
@@ -265,8 +269,10 @@ async function startGame(room) {
   playInstruction.textContent = 'Preparing the world…';
   playGate.hidden = false;
   const invite = new URL(location.href);
+  const diagnostics = invite.searchParams.has('diagnostics');
   invite.search = ''; invite.hash = ''; invite.searchParams.set('room', room.roomCode);
-  history.replaceState(null, '', invite);
+  // A reload keeps ?diagnostics; the shared invite link never carries it.
+  history.replaceState(null, '', diagnostics ? `${invite.pathname}?room=${room.roomCode}&diagnostics` : invite);
   document.getElementById('invite-url').value = invite.href;
 
 
@@ -404,6 +410,7 @@ async function startGame(room) {
     firstPerson.update(dt, player);
     characters?.update(dt, player.position, session.ledger.story?.stage ?? 0);
     adventure?.update(now);
+    emotes.update(now);
     const cx = Math.floor(player.position.x / 16);
     const cz = Math.floor(player.position.z / 16);
     if (cx !== lastCX || cz !== lastCZ) {

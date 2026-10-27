@@ -182,3 +182,18 @@ body #creature-panel[open] { display: flex; flex-direction: column; height: min(
 #hud { z-index: 20; }
 #controls-overlay header { position: sticky; top: -18px; margin: -1px -1px 12px; padding: 8px 0; background: var(--menu-panel); z-index: 1; }
 #creature-panel .pack-nav button[aria-pressed=true] .menu-icon { background: #17382c; border-radius: 8px; padding: 5px; }
+/* Emotes and pings: a button, a wheel of fixed pictures (no text box anywhere), and a locator dot per room-mate. */
+#hud #open-emotes { position: fixed; right: 12px; top: 392px; min-width: 56px; pointer-events: auto; color: var(--menu-gold); }
+body.emote-open #room-gate { display: none !important; }
+#emote-wheel { position: fixed; inset: 0; z-index: 120; display: grid; place-items: center; padding: 12px; background: #07140d99; pointer-events: auto; }
+#emote-wheel[hidden] { display: none; }
+.emote-card { width: min(360px, 100%); padding: 12px; background: #102a25; border: 2px solid #bbdfa2; border-radius: 14px; box-shadow: 0 8px 36px #000b; }
+.emote-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+#emote-wheel button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-width: 64px; min-height: 76px; padding: 6px 4px; background: #173e2d; color: #fff6b5; border: 2px solid #b8d991; border-radius: 10px; font-size: 16px; font-weight: 700; }
+#emote-wheel [data-ping] { border-color: var(--menu-gold); }
+#emote-wheel .menu-icon { width: 44px; height: 44px; }
+#emote-wheel [data-quiet] { width: 100%; margin-top: 8px; min-height: 64px; flex-direction: row; justify-content: center; gap: 10px; }
+#emote-wheel [data-quiet][aria-pressed=true] { background: #c7ef91; color: #071c14; }
+#emote-wheel button:focus-visible, #open-emotes:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+.locator { position: fixed; width: 16px; height: 16px; margin: -8px 0 0 -8px; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 6px #000; pointer-events: none; }
+.locator[hidden] { display: none; }
