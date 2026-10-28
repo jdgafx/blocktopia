@@ -145,7 +145,7 @@ test('2. Pip follows its owner on land and through water; a friend who joins by 
   await enter(friend, code);
   const near = await pos(owner);
   await friend.evaluate(([x, y, z]) => { window.__THREE_GAME_DIAGNOSTICS__.debug.player.position.set(x + 2, y + 1, z); }, near);
-  await wait(4000);
+  await friend.waitForFunction(() => window.__PET_DIAGNOSTICS__?.seen?.length > 0, null, { timeout: 30_000, polling: 250 }).catch(() => {}); // the joiner connects after the 10 s ICE gather
   const seen = (await pets(friend))?.seen?.find(s => s.name === hatched.name);
   assert.ok(seen, `the friend sees no pet named ${hatched.name}: ${JSON.stringify((await pets(friend))?.seen)}`);
   assert.ok(flat(seen.position, await pos(owner)) <= 7, `the friend sees Pip ${flat(seen.position, await pos(owner)).toFixed(1)} blocks from its owner (want <= 7)`);
