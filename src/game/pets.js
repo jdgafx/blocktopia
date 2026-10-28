@@ -16,16 +16,19 @@ export const isPet = c => CREATURE_SPECIES[c?.species]?.kind === 'pet';
 // an anchor. Circles and back-and-forth stay near old anchors and teleports reset them, so they add (almost)
 // nothing; path length never counts.
 export function walkGain(walk, id, pos, now = 0) {
-  const w = walk.get(id) ?? { at: null, anchors: [], credit: 0, t: now };
+  const w = walk.get(id) ?? { at: null, anchors: [], credit: 0, t: now, path: 0 };
   walk.set(id, w);
   w.credit = Math.min(2, w.credit + Math.max(0, now - w.t) / 1000 * MAX_RATE); w.t = now;
-  const jumped = w.at && Math.hypot(pos.x - w.at.x, pos.z - w.at.z) > JUMP;
+  const stride = w.at ? Math.hypot(pos.x - w.at.x, pos.z - w.at.z) : 0, jumped = stride > JUMP;
   w.at = { x: pos.x, z: pos.z };
-  if (jumped || !w.anchors.length) { w.anchors = [w.at]; return 0; }
+  if (jumped || !w.anchors.length) { w.anchors = [w.at]; w.path = 0; return 0; }
+  w.path += stride;
   if (w.credit < 1 || w.anchors.some(a => Math.hypot(pos.x - a.x, pos.z - a.z) < STEP)) return 0;
-  w.credit -= 1; w.anchors.push(w.at);
+  const straight = w.path <= 1.6 * Math.hypot(pos.x - w.anchors.at(-1).x, pos.z - w.anchors.at(-1).z); // back-and-forth piles up path, not distance
+  if (straight) w.credit -= 1;
+  w.path = 0; w.anchors.push(w.at);
   if (w.anchors.length > MEMORY) w.anchors.shift();
-  return 1;
+  return straight ? 1 : 0;
 }
 
 export function newPet(ownerId, { name = PET_NAMES[0], trust = PET_START_TRUST } = {}, at, now) {

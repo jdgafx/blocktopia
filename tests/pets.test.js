@@ -15,6 +15,7 @@ describe('walking hatches the egg, cheating does not', () => {
     expect(run(Array.from({ length: 200 }, (_, i) => ({ x: i * .5, z: 0 })))).toBeGreaterThanOrEqual(15); // 100 blocks in 40 s
     expect(run(Array.from({ length: 400 }, (_, i) => ({ x: Math.cos(i / 6) * 2, z: Math.sin(i / 6) * 2 })))).toBe(0);
     expect(run(Array.from({ length: 400 }, (_, i) => ({ x: Math.abs(((i * .5) % 30) - 15), z: 0 })))).toBeLessThanOrEqual(3);
+    expect(run(Array.from({ length: 300 }, (_, i) => ({ x: i * .06 + 7 * Math.sin(i / 4), z: 0 })))).toBeLessThanOrEqual(2); // 7-block sweeps drifting 3.6 blocks per 12 s
     expect(run(Array.from({ length: 10 }, (_, i) => ({ x: i * 150, z: 0 })))).toBe(0);
   });
   it('a fast runner cannot hatch before about 50 s', () => {
