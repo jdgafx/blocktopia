@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { buildAnimal } from './animals.js';
+import { PetVisuals } from './pets-visuals.js';
 
 const SPECIES = ['raptor', 'stegosaur', 'mammoth', 'griffin', 'forest-dragon', 'moonstag', 'sauropod', 'triceratops'];
 const SHAPES = {
@@ -170,7 +171,7 @@ export function buildCreature(species, materials, detail = true) {
 export class CreatureVisuals {
   constructor(world, scene) {
     this.world = world; this.scene = scene; this.records = new Map(); this.templates = new Map(); this.materials = new Map(); this.disposed = false;
-    this.raycaster = new THREE.Raycaster(); this.time = 0; this._lastTargetDistance = Infinity;
+    this.raycaster = new THREE.Raycaster(); this.time = 0; this.pets = new PetVisuals(scene); this._lastTargetDistance = Infinity;
     const loader = new THREE.TextureLoader(), pending = [];
     this.common = { bone: new THREE.MeshStandardMaterial({ color: 0xc6b38b, roughness: .68 }), dark: new THREE.MeshStandardMaterial({ color: 0x2e2721, roughness: .85 }), eye: new THREE.MeshStandardMaterial({ color: 0x151c12, roughness: .16 }) };
     for (const species of SPECIES) {
@@ -208,6 +209,7 @@ export class CreatureVisuals {
     if (this.disposed) return;
     this.time += Math.min(.1, Math.max(0, dt || 0));
     const creatures = authoritativeState?.creatures ?? {};
+    this.pets.update(dt, observer, creatures);
     for (const [id, record] of this.records) if (!creatures[id] || creatures[id].harvested || creatures[id].species !== record.species) { this.scene.remove(record.root); this.records.delete(id); }
     for (const [id, c] of Object.entries(creatures)) {
       if (!SHAPES[c.species] || c.harvested || ![c.x, c.y, c.z].every(Number.isFinite)) continue;
@@ -263,7 +265,7 @@ export class CreatureVisuals {
   }
 
   dispose() {
-    this.disposed = true;
+    this.disposed = true; this.pets.dispose();
     for (const r of this.records.values()) this.scene.remove(r.root);
     const geometries = new Set(); for (const templates of this.templates.values()) for (const model of templates) model.traverse(p => { if (p.isMesh) geometries.add(p.geometry); });
     geometries.forEach(g => g.dispose());

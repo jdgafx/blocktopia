@@ -1,4 +1,5 @@
 import { encodeChunks, decodeChunks } from '../network/chunk-codec.js';
+import { cleanRecord } from './pets.js';
 export const MAX_SAVE_BYTES = 2 * 1024 * 1024;
 const METADATA = 'id,user_id,name,seed,mode,revision,updated_at';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -107,5 +108,27 @@ export class ExpeditionSaves {
     if (error) throw databaseError(error);
     if (!data) throw new SaveConflictError();
     return data;
+  }
+}
+
+// The signed-in player's egg or pet, saved with the account so it follows them into any room.
+export class PetSaves {
+  constructor(client, userId) {
+    validId(userId);
+    this.client = client;
+    this.userId = userId;
+  }
+
+  async load() {
+    const { data, error } = await this.client.from('player_pets').select('pet').eq('user_id', this.userId).maybeSingle();
+    if (error) throw databaseError(error);
+    return cleanRecord(data?.pet);
+  }
+
+  async save(record) {
+    const pet = cleanRecord(record);
+    if (!pet) throw new TypeError('Invalid pet record.');
+    const { error } = await this.client.from('player_pets').upsert({ user_id: this.userId, pet }, { onConflict: 'user_id' });
+    if (error) throw databaseError(error);
   }
 }

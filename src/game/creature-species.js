@@ -33,6 +33,10 @@ export const CREATURE_SPECIES = Object.freeze(Object.fromEntries([
     temperament: 'shy', health: 60, speed: 1.5, sprint: 4.5, radius: .65, height: 2.5, damage: 7, reach: 1.5,
     carry: 35, weight: 4, prey: [], resources: { [P.RAW_MEAT]: 3, [P.HIDE]: 2 },
     help: 'A gentle pack companion that finds one extra portion whenever you forage together.' },
+  // A hatched pet: never wild (no habitat), cannot be hurt, fought, harvested or released; it swims after its owner.
+  { id: 'pip', kind: 'pet', label: 'Pip', habitats: [], diet: [], temperament: 'calm', health: 30, speed: 3.4, sprint: 7,
+    radius: .4, height: .9, damage: 0, reach: 0, carry: 0, weight: 0, prey: [], resources: {}, swims: true, followGap: 2,
+    help: 'A friendly pet that hatches from your egg, follows you over land and water, and likes to be patted.' },
 ].map(species => [species.id, Object.freeze({ ...species, capacity: species.carry, carryCapacity: species.carry, texture: species.texture ?? `/textures/creatures/${species.id}-color.webp`,
   habitats: Object.freeze(species.habitats), diet: Object.freeze(species.diet), prey: Object.freeze(species.prey), resources: Object.freeze(species.resources) })])));
 export const SPECIES_IDS = Object.freeze(Object.keys(CREATURE_SPECIES));

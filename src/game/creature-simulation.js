@@ -1,6 +1,7 @@
 import { CREATURE_SPECIES, SPECIES_IDS } from './creature-species.js';
 import { validCreatureState, validEntityId, newCreaturePlayer, MAX_CREATURES, MAX_CREATURE_RECORDS, MAX_CREATURE_PLAYERS } from './creature-state.js';
 import { getRegion } from './regions.js';
+import { walkGain, isPet, newPet, petId, WALK_CELLS, PET_START_TRUST, PET_NAMES } from './pets.js';
 
 function hash(text) {
   let h = 2166136261;
@@ -9,12 +10,16 @@ function hash(text) {
 }
 const distance = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const round = number => Math.round(number * 1000) / 1000;
-function groundAt(x, z, context) {
+function groundAt(x, z, context, swims = false) {
   const bx = Math.floor(x), bz = Math.floor(z), height = context.surfaceHeight?.(bx, bz);
   if (!Number.isFinite(height) || height < 1 || height > 60) return null;
   if (!context.getBlock) return height < 21 ? null : height + 1;
   for (let y = Math.min(62, Math.floor(height) + 4); y >= Math.max(0, height - 12); y--) {
-    if (context.getBlock(bx, y, bz) === 14) return null;
+    if (context.getBlock(bx, y, bz) === 14) {
+      if (!swims) return null;
+      while (context.getBlock(bx, y + 1, bz) === 14) y++; // deep water: swimmers float on its surface
+      return y + .7;
+    }
     if (context.isSolid?.(bx, y, bz)) return y + 1;
   }
   return null;
@@ -99,8 +104,8 @@ function move(c, target, speed, elapsed, context) {
     let moved = false;
     for (const turn of [0, .7, -.7, 1.3, -1.3]) {
       const yaw = heading + turn, x = c.x + Math.sin(yaw) * travel / steps, z = c.z + Math.cos(yaw) * travel / steps;
-      const y = groundAt(x, z, context);
-      if (y === null || Math.abs(y - c.y) > 1.05 || !clearAt(x, y, z, species, context)) continue;
+      const y = groundAt(x, z, context, species.swims);
+      if (y === null || Math.abs(y - c.y) > (species.swims ? 2.5 : 1.05) || !clearAt(x, y, z, species, context)) continue;
       c.x = round(x); c.y = y; c.z = round(z); c.yaw = Math.atan2(Math.sin(yaw), Math.cos(yaw)); moved = true; break;
     }
     if (!moved) break;
@@ -127,9 +132,28 @@ function attack(c, target, kind, state, now, context) {
   }
   c.lastAttackAt = now; c.touched = true;
 }
+const PET_LEASH = 9;
+// A pet left behind (or an owner who jumped far) reappears beside its owner, on land or on the water.
+function placeNear(c, point, species, context) {
+  for (const [dx, dz] of [[-1.5, 0], [1.5, 0], [0, -1.5], [0, 1.5], [0, 0]]) {
+    const x = point.x + dx, z = point.z + dz, y = groundAt(x, z, context, species.swims);
+    if (y !== null && Math.abs(y - point.y) < 6 && clearAt(x, y, z, species, context)) { c.x = round(x); c.y = y; c.z = round(z); return; }
+  }
+  c.x = round(point.x); c.y = point.y; c.z = round(point.z);
+}
+function follow(c, owner, species, elapsed, context) {
+  if (c.command === 'stay' || !owner) { c.behavior = 'staying'; return; }
+  const pet = species.kind === 'pet';
+  if (pet && distance(c, owner.position) > PET_LEASH) placeNear(c, owner.position, species, context);
+  const gap = distance(c, owner.position);
+  c.behavior = gap > (species.followGap ?? 3) ? 'following' : 'resting';
+  if (c.behavior === 'following') move(c, owner.position, gap > (pet ? 5 : 9) ? species.sprint : species.speed, elapsed, context);
+  if (pet && c.behavior === 'following' && c.speed < .05 && distance(c, owner.position) > 4) placeNear(c, owner.position, species, context); // stuck behind something
+}
 function think(c, state, players, now, elapsed, context) {
   const species = CREATURE_SPECIES[c.species]; c.speed = 0;
   if (c.health <= 0) { c.behavior = 'dead'; return; }
+  if (species.kind === 'pet') { follow(c, players.find(p => p.id === c.ownerId), species, elapsed, context); return; }
   c.hunger = Math.max(0, c.hunger - elapsed * .07);
   const activePlayers = players.filter(p => p.active !== false && state.players[p.id]?.health > 0 && now >= state.players[p.id].downedUntil);
   const nearest = [...activePlayers].sort((a, b) => distance(c, a.position) - distance(c, b.position))[0];
@@ -156,12 +180,7 @@ function think(c, state, players, now, elapsed, context) {
     return;
   }
   c.fear = Math.max(0, c.fear - elapsed * 2);
-  if (c.ownerId) {
-    if (c.command === 'stay' || !owner) { c.behavior = 'staying'; return; }
-    c.behavior = distance(c, owner.position) > 3 ? 'following' : 'resting';
-    if (c.behavior === 'following') move(c, owner.position, distance(c, owner.position) > 9 ? species.sprint : species.speed, elapsed, context);
-    return;
-  }
+  if (c.ownerId) { follow(c, owner, species, elapsed, context); return; }
   if (nearest && distance(c, nearest.position) < 6) {
     if ((c.trust[nearest.id] ?? 0) >= 20) {
       c.behavior = 'social'; c.yaw = Math.atan2(nearest.position.x - c.x, nearest.position.z - c.z); return;
@@ -206,6 +225,7 @@ export function stepCreatures(state, context = {}) {
     if (!next.players[p.id] && Object.keys(next.players).length < MAX_CREATURE_PLAYERS) next.players[p.id] = newCreaturePlayer();
     const player = next.players[p.id];
     if (!player || p.active === false || player.health <= 0) continue;
+    if (context.walk && (player.egg ?? 0) < 1) player.egg = Math.min(1, round((player.egg ?? 0) + walkGain(context.walk, p.id, p.position) / WALK_CELLS));
     player.hunger = Math.max(0, player.hunger - dt * .06);
     if (player.hunger === 0) {
       player.health = Math.max(0, player.health - dt * .35);
@@ -213,11 +233,15 @@ export function stepCreatures(state, context = {}) {
     }
   }
   const knownPlayers = players.filter(p => next.players[p.id]);
+  for (const p of knownPlayers) { // a full egg hatches where its owner stands
+    if (next.players[p.id].egg >= 1 && !next.creatures[petId(p.id)] && Object.keys(next.creatures).length < MAX_CREATURE_RECORDS)
+      next.creatures[petId(p.id)] = newPet(p.id, { name: PET_NAMES[0], trust: PET_START_TRUST }, p.position, now);
+  }
   populate(next, knownPlayers, context, now);
   for (const c of Object.values(next.creatures)) {
     if (!c.active) continue;
     const near = Math.min(...knownPlayers.map(p => distance(c, p.position)));
-    if (c.lastSimAt && now - c.lastSimAt < (near > 40 ? 500 : 80)) continue;
+    if (c.lastSimAt && now - c.lastSimAt < (near > 40 && !isPet(c) ? 500 : 80)) continue; // a pet far from everyone was just left behind
     const elapsed = c.lastSimAt ? Math.min(1, (now - c.lastSimAt) / 1000) : dt;
     c.lastSimAt = now; think(c, next, knownPlayers, now, elapsed, context);
   }

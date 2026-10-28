@@ -3,6 +3,8 @@ import { raycast } from '../engine/raycast.js';
 import { creatureAction, initialCreatureState, validCreatureState } from '../game/creature-state.js';
 import { stepCreatures } from '../game/creature-simulation.js';
 import { validateMutationIntent, MAX_INTENT_IDS } from './protocol.js';
+import { PetSaves } from '../game/saves.js';
+import { petView, petRecord } from '../game/pets.js';
 
 const STEP_SECONDS = .2;
 const TABLE = 'blocktopia_room_actors';
@@ -14,7 +16,36 @@ export class CreatureSession {
     this.session = session; this.world = world; this.actorId = actorId;
     this.actors = new Map(); this.elapsed = 0; this.identityAt = 0;
     this.resyncAt = 0; this.ready = false; this.pendingIdentity = false; this.disposed = false;
+    this.walk = new Map(); // host only: new-ground tracking per player, for hatching eggs
+    this.pet = { wait: 0, save: 0, saving: false, stored: null, loaded: false, failed: false, base: undefined, saved: null };
+    this.loadPet();
     this.readyPromise = this.register();
+  }
+  // The account's egg or pet is loaded at once, restored into the room once, and saved only after that restore.
+  loadPet() {
+    try { this.petSaves = new PetSaves(this.session.supabase, this.actorId); } catch { this.pet.failed = true; return; }
+    this.petSaves.load().then(record => { this.pet.stored = this.pet.saved = record; this.pet.loaded = true; })
+      .catch(error => { this.pet.failed = true; console.warn('Pet could not be loaded; it will not be saved this visit.', error); });
+  }
+  syncPet(dt) {
+    const p = this.pet, s = this.session, mine = s.ledger.creatures?.players?.[this.actorId];
+    if (p.failed || !p.loaded) return;
+    if ((mine?.syncs ?? 0) <= (p.base ?? Infinity)) { // not restored into this room yet: ask the host, again every 3 s
+      if ((p.wait -= dt) > 0) return;
+      p.wait = 3; p.base ??= mine?.syncs ?? 0;
+      s.submitMutation({ kind: 'creature', action: 'petsync', ...(p.stored ?? { stage: 'egg', egg: 0 }) });
+      return;
+    }
+    if ((p.save -= dt) > 0 || p.saving) return;
+    this.savePet();
+  }
+  savePet() {
+    const p = this.pet, record = petRecord(petView(this.session.ledger.creatures, this.actorId)), was = p.saved;
+    if (p.failed || p.saving || (was && record.stage === was.stage && record.name === was.name && record.trust === was.trust
+      && Math.abs((record.egg ?? 0) - (was.egg ?? 0)) < .01)) return;
+    p.saving = true; p.save = 1.5;
+    this.petSaves.save(record).then(() => { p.saved = record; })
+      .catch(error => console.warn('Pet could not be saved; will retry.', error)).finally(() => { p.saving = false; });
   }
   async register() {
     const s = this.session;
@@ -67,10 +98,11 @@ export class CreatureSession {
     if (!this.ready || !s.ready || !s.snapshotReady || this.disposed) return;
     this.elapsed += dt; this.identityAt += dt;
     if (this.identityAt > 2) { this.identityAt = 0; this.resolveActors().catch(() => {}); }
+    this.syncPet(dt);
     if (s.role !== 'host' || this.elapsed < STEP_SECONDS) return;
     const elapsed = Math.min(this.elapsed, .5); this.elapsed = 0;
     const before = s.ledger.creatures ?? initialCreatureState(s.seed);
-    const state = stepCreatures(before, { players: this.players(), dt: elapsed, now: Date.now(),
+    const state = stepCreatures(before, { players: this.players(), dt: elapsed, now: Date.now(), walk: this.walk,
       canReach: (from,to) => this.canReach(from,to),
       surfaceHeight: (x,z) => this.world.surfaceHeight(Math.floor(x),Math.floor(z)),
       isSolid: (x,y,z) => this.world.isSolid(Math.floor(x),Math.floor(y),Math.floor(z)),
@@ -145,5 +177,8 @@ export class CreatureSession {
     else for (const member of s.members) if (member.playerId !== s.playerId) s._sendSnapshot({ send: raw => s.transport.sendControl(member.playerId, JSON.parse(raw)) });
     return true;
   }
-  dispose() { this.disposed = true; }
+  dispose() {
+    if (this.pet.base !== undefined && (this.session.ledger.creatures?.players?.[this.actorId]?.syncs ?? 0) > this.pet.base) this.savePet();
+    this.disposed = true;
+  }
 }

@@ -21,8 +21,8 @@ const act = (state, action, now, extra = {}, context = {}, stock = {}) => creatu
 
 describe('authoritative creature transactions', () => {
   it('validates all eight species and rejects corrupted nested save data', () => {
-    expect(SPECIES_IDS).toHaveLength(8);
-    for (const id of SPECIES_IDS) {
+    const wild = SPECIES_IDS.filter(id => SPECIES[id].kind !== 'pet'); expect(wild).toHaveLength(8);
+    for (const id of wild) {
       expect(validCreatureState(fixture(id))).toBe(true);
       expect(SPECIES[id].texture).toMatch(/-color.webp$/);
     }

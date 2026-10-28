@@ -1,12 +1,17 @@
 import { CREATURE_SPECIES, CREATURE_BEHAVIORS } from './creature-species.js';
 import { SUPPLY_IDS, PROVISIONS as P } from './items.js';
 import { getRegion } from './regions.js';
+import { PET_NAMES, PET_PAT_TRUST, isPet, petId, newPet, cleanRecord } from './pets.js';
 
 export const MAX_CREATURES = 24;
 export const MAX_CREATURE_RECORDS = 256;
 export const MAX_CREATURE_PLAYERS = 64;
 export const PLAYER_BAG_CAPACITY = 40;
-export const CREATURE_ACTIONS = Object.freeze(['fight', 'harvest', 'feed', 'care', 'follow', 'stay', 'release', 'deposit', 'withdraw', 'load', 'unload', 'eat', 'forage', 'recover']);
+export const CREATURE_ACTIONS = Object.freeze(['fight', 'harvest', 'feed', 'care', 'follow', 'stay', 'release', 'deposit', 'withdraw', 'load', 'unload', 'eat', 'forage', 'recover', 'pat', 'rename', 'petsync']);
+const PET_ONLY = ['pat', 'rename', 'petsync'];
+export const PET_ACTIONS = Object.freeze(['pat', 'follow', 'stay', 'rename']);
+// The one place that says what may be done to a creature: a pet has no harm action to offer or accept.
+export const allowedActions = c => isPet(c) ? PET_ACTIONS : CREATURE_ACTIONS.filter(a => !PET_ONLY.includes(a));
 const MAX_STACK = 1000000;
 const own = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
 export const validEntityId = id => typeof id === 'string' && id.length <= 128 && /^[a-zA-Z0-9_-][a-zA-Z0-9:_-]*$/.test(id)
@@ -26,13 +31,13 @@ export function initialCreatureState(seed) {
   return { version: 1, seed: Number(seed) >>> 0, revision: 0, creatures: {}, players: {}, lastStepAt: 0 };
 }
 export function newCreaturePlayer() {
-  return { health: 100, hunger: 100, bag: {}, lastActionAt: 0, lastFightAt: 0, lastForageAt: 0,
+  return { health: 100, hunger: 100, bag: {}, egg: 0, syncs: 0, lastActionAt: 0, lastFightAt: 0, lastForageAt: 0,
     lastHurtAt: 0, downedUntil: 0, attackerId: null };
 }
 const CREATURE_FIELDS = ['id','species','x','y','z','yaw','health','hunger','fear','boldness','temperament','trust','ownerId',
   'behavior','command','active','harvested','touched','lastPositiveAt','lastAttackAt','lastHurtAt','lastSimAt',
-  'threatId','speed','scale','age','bag','homeX','homeZ'];
-const PLAYER_FIELDS = ['health','hunger','bag','lastActionAt','lastFightAt','lastForageAt','lastHurtAt','downedUntil','attackerId'];
+  'threatId','speed','scale','age','bag','homeX','homeZ','name'];
+const PLAYER_FIELDS = ['health','hunger','bag','egg','syncs','lastActionAt','lastFightAt','lastForageAt','lastHurtAt','downedUntil','attackerId'];
 export function validCreatureState(state) {
   if (!keys(state, ['version','seed','revision','creatures','players','lastStepAt']) || state.version !== 1
     || !Number.isSafeInteger(state.seed) || state.seed < 0 || state.seed > 0xffffffff || !timestamp(state.revision)
@@ -52,6 +57,7 @@ export function validCreatureState(state) {
       || !['lastPositiveAt','lastAttackAt','lastHurtAt','lastSimAt'].every(key => timestamp(c[key]))
       || !(c.threatId === null || (typeof c.threatId === 'string' && /^[pc]:/.test(c.threatId) && validEntityId(c.threatId.slice(2))))
       || !finite(c.speed, 0, species.sprint + .01) || c.scale !== 1 || c.age !== 'adult' || !validInventory(c.bag, species.carry)
+      || (species.kind === 'pet' ? c.ownerId === null || c.id !== petId(c.ownerId) || !PET_NAMES.includes(c.name) : c.name !== undefined)
       || (c.health === 0 && c.behavior !== 'dead') || (c.health > 0 && c.behavior === 'dead')
       || (c.harvested && (c.health !== 0 || c.active)) || ((c.health === 0 || c.ownerId !== null || c.harvested) && !c.touched)) return false;
     if (c.active) active++;
@@ -60,6 +66,7 @@ export function validCreatureState(state) {
   for (const [id, player] of Object.entries(state.players)) {
     if (!validEntityId(id) || !keys(player, PLAYER_FIELDS) || !finite(player.health, 0, 100) || !finite(player.hunger, 0, 100)
       || !validInventory(player.bag, PLAYER_BAG_CAPACITY)
+      || !(player.egg === undefined || finite(player.egg, 0, 1)) || !(player.syncs === undefined || (Number.isSafeInteger(player.syncs) && player.syncs >= 0))
       || !['lastActionAt','lastFightAt','lastForageAt','lastHurtAt','downedUntil'].every(key => timestamp(player[key]))
       || !(player.attackerId === null || validEntityId(player.attackerId))) return false;
   }
@@ -106,6 +113,17 @@ export function creatureAction(state, supplies, intent, context = {}) {
       if ((source[itemId] ?? 0) < count) return fail('There are not enough items to transfer');
       if ((target[itemId] ?? 0) + count > MAX_STACK || (action === 'withdraw' && bagCount(target) + count > PLAYER_BAG_CAPACITY)) return fail('The destination has no room for those items');
       add(source, itemId, -count); add(target, itemId, count);
+    } else if (action === 'petsync') {
+      // The client restores its saved account pet or egg. Progress and trust only ever go up here; a pet is never removed.
+      const saved = cleanRecord(intent), id = petId(actorId);
+      if (!saved) return fail('Pet record is invalid');
+      const pet = next.creatures[id];
+      if (saved.stage === 'pet' && !pet) {
+        if (Object.keys(next.creatures).length >= MAX_CREATURE_RECORDS) return fail('This expedition has no room for another pet');
+        next.creatures[id] = newPet(actorId, saved, position, now);
+      } else if (pet && saved.stage === 'pet') { pet.trust[actorId] = Math.max(pet.trust[actorId] ?? 0, saved.trust); pet.name = saved.name; }
+      player.egg = pet || saved.stage === 'pet' ? 1 : Math.max(player.egg ?? 0, saved.egg);
+      player.syncs = (player.syncs ?? 0) + 1;
     } else if (action === 'eat') {
       const food = { [P.RAW_MEAT]: [20, 8], [P.COOKED_MEAT]: [40, 24], [P.FORAGE]: [12, 4] }[intent.itemId];
       if (!food || !(player.bag[intent.itemId] > 0)) return fail('Carry an edible provision first');
@@ -123,9 +141,17 @@ export function creatureAction(state, supplies, intent, context = {}) {
       if (!c || !c.active || c.harvested || !within(position, c)) return fail('Move within five metres of that creature');
       if (context.canReach?.(position, c) === false) return fail('A wall or obstacle blocks your reach');
       const species = CREATURE_SPECIES[c.species], owned = c.ownerId === actorId;
+      if (!allowedActions(c).includes(action)) return fail(isPet(c) ? 'Pets are friends: pat them and keep them company' : 'Unknown creature action');
       if (['fight','harvest','follow','stay','release','load','unload'].includes(action) && c.ownerId && !owned) return fail('That companion belongs to another keeper');
       if (['fight','harvest'].includes(action) && owned && intent.confirm !== true) return fail('Confirm this action against your own companion');
-      if (action === 'harvest') {
+      if (action === 'pat') {
+        if (c.lastPositiveAt && now - c.lastPositiveAt < 2000) return fail(`${c.name} is enjoying the last pat. Wait a moment.`);
+        c.lastPositiveAt = now; c.fear = 0; c.trust[c.ownerId] = Math.min(100, (c.trust[c.ownerId] ?? 0) + PET_PAT_TRUST);
+      } else if (action === 'rename') {
+        if (!owned) return fail('Only the owner can choose a pet name');
+        if (!PET_NAMES.includes(intent.name)) return fail('Choose a name from the list');
+        c.name = intent.name;
+      } else if (action === 'harvest') {
         if (context.tool !== 'axe') return fail('Equip your axe to harvest the fallen creature');
         if (c.health > 0) return fail('Only a defeated creature can be harvested');
         const loot = { ...species.resources };

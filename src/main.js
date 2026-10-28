@@ -264,9 +264,9 @@ async function startGame(room) {
   playButton.title = 'Waiting for world textures to finish loading';
   playInstruction.textContent = 'Preparing the world…';
   playGate.hidden = false;
-  const invite = new URL(location.href);
+  const invite = new URL(location.href), diagnostics = invite.searchParams.has('diagnostics');
   invite.search = ''; invite.hash = ''; invite.searchParams.set('room', room.roomCode);
-  history.replaceState(null, '', invite);
+  history.replaceState(null, '', diagnostics ? `${invite.pathname}${invite.search}&diagnostics` : invite); // a reload keeps ?diagnostics; the shared invite link never has it
   document.getElementById('invite-url').value = invite.href;
 
 
