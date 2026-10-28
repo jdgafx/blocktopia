@@ -10,16 +10,19 @@ const at = (x, z, y = 29) => ({ x, y, z });
 const step = (state, now, players, terrain = land, walk) => stepCreatures(state, { ...terrain, now, dt: .2, players, walk });
 
 describe('walking hatches the egg, cheating does not', () => {
-  const run = path => { const walk = new Map(); let n = 0; for (const p of path) n += walkGain(walk, 'a', p); return n; };
+  const run = path => { const walk = new Map(); let n = 0, now = 0; for (const p of path) n += walkGain(walk, 'a', p, now += 200); return n; };
   it('counts a straight walk, not circles, back-and-forth or teleports', () => {
-    expect(run(Array.from({ length: 200 }, (_, i) => ({ x: i * .5, z: 0 })))).toBeGreaterThanOrEqual(24); // 100 blocks
-    expect(run(Array.from({ length: 400 }, (_, i) => ({ x: Math.cos(i / 6) * 2, z: Math.sin(i / 6) * 2 })))).toBeLessThanOrEqual(4);
-    expect(run(Array.from({ length: 400 }, (_, i) => ({ x: Math.abs(((i * .5) % 30) - 15), z: 0 })))).toBeLessThanOrEqual(5);
+    expect(run(Array.from({ length: 200 }, (_, i) => ({ x: i * .5, z: 0 })))).toBeGreaterThanOrEqual(15); // 100 blocks in 40 s
+    expect(run(Array.from({ length: 400 }, (_, i) => ({ x: Math.cos(i / 6) * 2, z: Math.sin(i / 6) * 2 })))).toBe(0);
+    expect(run(Array.from({ length: 400 }, (_, i) => ({ x: Math.abs(((i * .5) % 30) - 15), z: 0 })))).toBeLessThanOrEqual(3);
     expect(run(Array.from({ length: 10 }, (_, i) => ({ x: i * 150, z: 0 })))).toBe(0);
+  });
+  it('a fast runner cannot hatch before about 50 s', () => {
+    expect(run(Array.from({ length: 200 }, (_, i) => ({ x: i * 2, z: 0 })))).toBeLessThanOrEqual(21); // 40 s at 10 blocks/s
   });
   it('the host hatches Pip beside its owner once enough new ground is walked', () => {
     let state = initialCreatureState(1), now = 1000; const walk = new Map();
-    for (let i = 0; i < WALK_CELLS * 8 && !state.creatures[petId('alice')]; i++) { now += 200; state = step(state, now, [{ id: 'alice', position: at(i * .8, 0) }], land, walk); }
+    for (let i = 0; i < WALK_CELLS * 12 && !state.creatures[petId('alice')]; i++) { now += 200; state = step(state, now, [{ id: 'alice', position: at(i * .8, 0) }], land, walk); }
     expect(validCreatureState(state)).toBe(true);
     expect(state.creatures[petId('alice')]).toMatchObject({ species: 'pip', name: 'Pip', ownerId: 'alice' });
     expect(petView(state, 'alice')).toMatchObject({ stage: 'pet', name: 'Pip', trust: 10 });

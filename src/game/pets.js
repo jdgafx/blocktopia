@@ -5,27 +5,26 @@ export const PET_SPECIES = 'pip';
 export const PET_NAMES = Object.freeze(['Pip', 'Pebble', 'Biscuit', 'Mochi', 'Clover', 'Nugget', 'Pickle', 'Waffles']);
 export const PET_START_TRUST = 10;
 export const PET_PAT_TRUST = 2;
-export const WALK_CELLS = 60;   // new 4x4-block cells that hatch an egg: about 75 s of walking
-const CELL = 4, MEMORY = 96, JUMP = 8;  // JUMP: blocks between two host steps that count as a teleport
+export const WALK_CELLS = 26;   // 6-block steps away from where the player has been that hatch an egg: 52 s at the fastest, about 75 s typical
+const STEP = 6, MEMORY = 12, JUMP = 8, MAX_RATE = .5;  // MAX_RATE: steps per second, so a fast runner cannot hatch before about 50 s
+// shortcut: the headless/phone speed varies 2x, so slow walkers take up to ~95 s; fine for "about 60-90 s".  // MEMORY: recent anchor points; JUMP: blocks between two host steps that count as a teleport
 
 export const petId = ownerId => `pet:${ownerId}`;
 export const isPet = c => CREATURE_SPECIES[c?.species]?.kind === 'pet';
 
-// Counts cells the player enters that are not among the last MEMORY cells it visited. Circles, back-and-forth
-// and teleports revisit or skip cells, so they add (almost) nothing; path length never counts.
-export function walkGain(walk, id, pos) {
-  const w = walk.get(id) ?? { at: null, key: '', seen: new Set() };
+// A step counts when the player stands STEP blocks from every one of its last MEMORY anchor points, then becomes
+// an anchor. Circles and back-and-forth stay near old anchors and teleports reset them, so they add (almost)
+// nothing; path length never counts.
+export function walkGain(walk, id, pos, now = 0) {
+  const w = walk.get(id) ?? { at: null, anchors: [], credit: 0, t: now };
   walk.set(id, w);
-  const key = `${Math.floor(pos.x / CELL)},${Math.floor(pos.z / CELL)}`;
+  w.credit = Math.min(2, w.credit + Math.max(0, now - w.t) / 1000 * MAX_RATE); w.t = now;
   const jumped = w.at && Math.hypot(pos.x - w.at.x, pos.z - w.at.z) > JUMP;
   w.at = { x: pos.x, z: pos.z };
-  if (!w.key) { w.key = key; w.seen.add(key); return 0; }
-  if (jumped) { w.key = key; return 0; }
-  if (key === w.key) return 0;
-  w.key = key;
-  if (w.seen.has(key)) return 0;
-  w.seen.add(key);
-  if (w.seen.size > MEMORY) w.seen.delete(w.seen.values().next().value);
+  if (jumped || !w.anchors.length) { w.anchors = [w.at]; return 0; }
+  if (w.credit < 1 || w.anchors.some(a => Math.hypot(pos.x - a.x, pos.z - a.z) < STEP)) return 0;
+  w.credit -= 1; w.anchors.push(w.at);
+  if (w.anchors.length > MEMORY) w.anchors.shift();
   return 1;
 }
 

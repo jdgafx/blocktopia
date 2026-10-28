@@ -225,7 +225,7 @@ export function stepCreatures(state, context = {}) {
     if (!next.players[p.id] && Object.keys(next.players).length < MAX_CREATURE_PLAYERS) next.players[p.id] = newCreaturePlayer();
     const player = next.players[p.id];
     if (!player || p.active === false || player.health <= 0) continue;
-    if (context.walk && (player.egg ?? 0) < 1) player.egg = Math.min(1, round((player.egg ?? 0) + walkGain(context.walk, p.id, p.position) / WALK_CELLS));
+    if (context.walk && (player.egg ?? 0) < 1) player.egg = Math.min(1, round((player.egg ?? 0) + walkGain(context.walk, p.id, p.position, now) / WALK_CELLS));
     player.hunger = Math.max(0, player.hunger - dt * .06);
     if (player.hunger === 0) {
       player.health = Math.max(0, player.health - dt * .35);
