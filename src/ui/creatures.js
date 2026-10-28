@@ -195,7 +195,7 @@ export function initCreatureUI(session, player, visuals, world, actorId) {
     const egg = mineNow(); eggHud.hidden = egg.stage !== 'egg' || !player.active;
     const eggHtml = eggHud.hidden ? '' : `Egg <meter min="0" max="1" value="${egg.progress}" aria-label="Egg progress"></meter> ${Math.floor(egg.progress * 100)}% · walk to hatch it`;
     if (eggHtml && eggHtml !== eggHud.dataset.html) { eggHud.dataset.html = eggHtml; eggHud.innerHTML = eggHtml; }
-    patTarget = player.active ? nearestPet(4, true) : null; patButton.hidden = !patTarget;
+    patTarget = player.active ? nearestPet(patTarget ? 4.9 : 4.5, true) : null; patButton.hidden = !patTarget;
     if (patTarget) patButton.textContent = `Pat ${state().creatures[patTarget].name}`;
     if (now > lastRefresh) { lastRefresh = now + 500; if (dialog.open) render(); }
   }};
