@@ -169,8 +169,17 @@ test('2. Pip follows its owner on land and through water; a friend who joins by 
 const hudProblems = p => p.evaluate(() => {
   const vis = el => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 && !el.closest('[hidden]') && getComputedStyle(el).visibility !== 'hidden'; };
   const els = [...document.querySelectorAll('#hud button, #egg-hud, #pat-pet, button[data-action="pat"]')].filter((el, i, a) => a.indexOf(el) === i && vis(el));
-  const box = el => { const r = el.getBoundingClientRect(); return [r.left, r.top, r.right, r.bottom]; };
+  // the part a person can see: clipped to the viewport and to every scrolling/clipping ancestor (the hotbar is a scroller)
+  const box = el => {
+    const r = el.getBoundingClientRect(); let b = [r.left, r.top, r.right, r.bottom];
+    const clip = (c) => { b = [Math.max(b[0], c[0]), Math.max(b[1], c[1]), Math.min(b[2], c[2]), Math.min(b[3], c[3])]; };
+    clip([0, 0, innerWidth, innerHeight]);
+    for (let a = el.parentElement; a; a = a.parentElement) { const cs = getComputedStyle(a); if (cs.overflowX !== 'visible' || cs.overflowY !== 'visible') { const q = a.getBoundingClientRect(); clip([q.left, q.top, q.right, q.bottom]); } }
+    return b;
+  };
+  const shown = el => { const b = box(el); return b[2] - b[0] >= 1 && b[3] - b[1] >= 1; };
   const hit = (a, b, pad = 0) => a[0] < b[2] + pad - 1 && a[2] > b[0] - pad + 1 && a[1] < b[3] + pad - 1 && a[3] > b[1] - pad + 1;
+  const onScreen = els.filter(shown); els.length = 0; els.push(...onScreen); // scrolled out of view is not covered
   const name = el => el.id || el.dataset.action || el.textContent.trim().slice(0, 12), out = [];
   const ch = document.getElementById('crosshair');
   for (const [i, el] of els.entries()) {
