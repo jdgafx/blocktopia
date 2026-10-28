@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import {
   MutationLedger, WORLD_VERSION, admissionDecision, createRoomCode, electHost,
-  isRoomCode, normalizeRoomCode, presenceMembers, roomSeed, validRoomDescriptor, validateSnapshot,
+  isRoomCode, normalizeRoomCode, parseSocial, presenceMembers, roomSeed, validRoomDescriptor, validateSnapshot,
 } from './protocol.js';
 import { handleIntent, receiveSnapshot, sendSnapshot } from './session-gameplay.js';
 import { WebRTCStar } from './peer.js';
@@ -353,6 +353,14 @@ export class MultiplayerSession {
       || payload.epoch !== this.epoch) return;
     this.transport.handleSignal(payload);
   }
+
+  _onSocial(payload) {
+    const message = parseSocial(payload);
+    if (!this.ready || !message || message.from === this.playerId
+      || !this.members.some(({ playerId }) => playerId === message.from)) return;
+    this.options.onSocial?.(message);
+  }
+  sendSocial(kind, id) { return this._broadcast('social', { kind, id, from: this.playerId }); }
 
   _sendMovement() {
     if (!this.ready) return;

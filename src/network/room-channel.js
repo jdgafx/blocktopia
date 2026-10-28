@@ -9,6 +9,7 @@ export function createRoomChannel(session, generation) {
     .on('broadcast', { event: 'admission-request' }, ({ payload }) => active() && session._onAdmissionRequest(payload))
     .on('broadcast', { event: 'admission-response' }, ({ payload }) => active() && session._onAdmissionResponse(payload))
     .on('broadcast', { event: 'host-announcement' }, ({ payload }) => active() && session._onHostAnnouncement(payload))
+    .on('broadcast', { event: 'social' }, ({ payload }) => active() && session._onSocial?.(payload))
     .on('broadcast', { event: 'signal' }, ({ payload }) => active() && session._onSignal(payload))
     .on('presence', { event: 'sync' }, () => active() && session._onPresenceSync());
   return channel;
