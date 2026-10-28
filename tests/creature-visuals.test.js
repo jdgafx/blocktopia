@@ -45,7 +45,7 @@ it('loads actual texture paths, selects visible geometry, removes harvested anim
   visuals.update(.1, camera.position, { creatures: { a: { ...c, health: 0, behavior: 'dead' } } });
   expect(r.models[0].rotation.z).toBeGreaterThan(0);
   visuals.update(.1, camera.position, { creatures: { a: { ...c, harvested: true } } });
-  expect(scene.children).toHaveLength(0);
+  expect(scene.children).toEqual([visuals.pets.mesh]); // only the pets mesh remains
   expect(visuals.target(camera)).toBe(null); expect(visuals.lastTargetDistance).toBe(Infinity);
   const roster = Object.fromEntries(species.map((name, i) => [name, { ...c, species: name, x: i * 4, z: -8 }]));
   visuals.update(.1, camera.position, { creatures: roster });

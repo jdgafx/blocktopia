@@ -59,7 +59,7 @@ export class Player {
       const pointer = event.pointerType || playPointer;
       playPointer = '';
       const touch = pointer === 'touch' || event.sourceCapabilities?.firesTouchEvents
-        || (!pointer && window.matchMedia?.('(pointer: coarse)').matches);
+        || window.matchMedia?.('(pointer: coarse)').matches; // a phone's primary pointer is touch: never take the pointer lock there (it hides every button from taps)
       if (touch || this.mouseMode === 'cursor') this.setActive(true);
       else this._requestMouseCapture();
     });

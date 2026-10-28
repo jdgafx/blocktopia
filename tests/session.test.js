@@ -471,3 +471,20 @@ describe('saved expedition room admission', () => {
     await session.destroy();
   });
 });
+
+describe('background pet sync', () => {
+  it('a petsync that cannot be sent never writes player text; a real action still does', () => {
+    const make = (snapshotReady, sent) => Object.assign(Object.create(MultiplayerSession.prototype), {
+      ready: true, snapshotReady, role: 'guest', hostId: 'host', playerId: 'me', runToken: 'r', epoch: 1, intentCounter: 0,
+      options: { onRejected: vi.fn() }, transport: { sendControl: vi.fn(() => sent) }, _status: vi.fn(),
+    });
+    for (const [ready, sent] of [[true, false], [false, true]]) {
+      const s = make(ready, sent);
+      expect(s.submitMutation({ kind: 'creature', action: 'petsync', stage: 'egg', egg: 0 })).toBe(false);
+      expect(s.options.onRejected).not.toHaveBeenCalled();
+      expect(s._status).not.toHaveBeenCalled();
+      expect(s.submitMutation({ kind: 'creature', action: 'pat', targetId: 'x' })).toBe(false);
+      expect(s.options.onRejected).toHaveBeenCalledTimes(1);
+    }
+  });
+});

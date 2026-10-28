@@ -3,11 +3,18 @@ import { icon, itemIcon } from './icons.js';
 import { ITEM_DEFS, PROVISIONS, SUPPLY_IDS } from '../game/items.js';
 import { raycast } from '../engine/raycast.js';
 import { SPECIES } from '../game/creature-species.js';
+import { allowedActions } from '../game/creature-state.js';
+import { isPet, petView, PET_NAMES } from '../game/pets.js';
 
 export function initCreatureUI(session, player, visuals, world, actorId) {
   const style = document.createElement('style');
-  style.textContent = `#creature-vitals{position:fixed;left:12px;top:76px;background:#15251ee8;padding:6px 9px;border-radius:4px;font-size:12px}#creature-hurt{position:fixed;inset:0;pointer-events:none;box-shadow:inset 0 0 80px #bd662c;opacity:0;z-index:25}@media(max-width:600px){#creature-vitals{top:216px;max-width:145px}}#creature-hud{position:fixed;left:50%;bottom:76px;transform:translateX(-50%);max-width:calc(100vw - 30px);text-align:center;background:#15251ee8;padding:7px 14px;border-radius:6px;pointer-events:none;font-size:13px}#open-creatures{position:fixed;right:12px;top:278px;z-index:30;min-height:44px}#creature-panel{width:min(650px,calc(100vw - 28px));max-height:85vh;overflow:auto;background:#15241e;color:#f4ecd8;border:1px solid #92866b;border-radius:12px;padding:22px}#creature-panel::backdrop{background:#07110bd9}#creature-panel h2{font-size:24px;margin:0 0 12px}#creature-panel p{line-height:1.5}#creature-actions{display:flex;flex-wrap:wrap;gap:8px}#creature-panel button{min-height:44px;font-size:13px;padding:8px 12px}#creature-items{display:grid;gap:8px;margin:16px 0}.provision-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px;border-top:1px solid #ffffff20;padding-top:8px}.provision-row>span{flex:1 1 200px}#creature-feedback{min-height:1.5em;color:#ffdb98}#creature-close{float:right}#creature-confirm{display:none;background:#512f23;padding:12px;margin:12px 0}#creature-confirm[data-open=true]{display:block}@media(max-width:600px){#open-creatures{top:278px;font-size:12px}#creature-hud{bottom:118px;width:max-content;font-size:11px}#creature-panel{padding:14px}}`;
+  style.textContent = `#creature-vitals{background:#15251ee8;padding:6px 9px;border-radius:4px;font-size:12px}#creature-hurt{position:fixed;inset:0;pointer-events:none;box-shadow:inset 0 0 80px #bd662c;opacity:0;z-index:25}#creature-hud{position:fixed;left:50%;bottom:76px;transform:translateX(-50%);max-width:calc(100vw - 30px);text-align:center;background:#15251ee8;padding:7px 14px;border-radius:6px;pointer-events:none;font-size:13px}#open-creatures{position:fixed;right:12px;top:278px;z-index:30;min-height:44px}#creature-panel{width:min(650px,calc(100vw - 28px));max-height:85vh;overflow:auto;background:#15241e;color:#f4ecd8;border:1px solid #92866b;border-radius:12px;padding:22px}#creature-panel::backdrop{background:#07110bd9}#creature-panel h2{font-size:24px;margin:0 0 12px}#creature-panel p{line-height:1.5}#creature-actions{display:flex;flex-wrap:wrap;gap:8px}#creature-panel button{min-height:44px;font-size:13px;padding:8px 12px}#creature-items{display:grid;gap:8px;margin:16px 0}.provision-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px;border-top:1px solid #ffffff20;padding-top:8px}.provision-row>span{flex:1 1 200px}#creature-feedback{min-height:1.5em;color:#ffdb98}#creature-close{float:right}#creature-confirm{display:none;background:#512f23;padding:12px;margin:12px 0}#creature-confirm[data-open=true]{display:block}@media(max-width:600px){#open-creatures{top:278px;font-size:12px}#creature-hud{bottom:118px;width:max-content;font-size:11px}#creature-panel{padding:14px}}`;
   document.head.append(style);
+  const petStyle = document.createElement('style');
+  petStyle.textContent = `#egg-hud{background:#15251ee8;padding:6px 9px;border-radius:4px;font-size:12px;display:flex;flex-wrap:wrap;gap:2px 6px;align-items:center}#egg-hud[hidden]{display:none}#egg-hud meter{width:80px}#pat-pet{min-width:96px;min-height:56px;font-size:16px;font-weight:700;border-radius:28px;background:#f2c27a;color:#2d1a08;border:2px solid #fff4d8}`;
+  document.head.append(petStyle);
+  const eggHud = document.createElement('div'); eggHud.id = 'egg-hud'; eggHud.hidden = true; eggHud.setAttribute('aria-label', 'Egg progress');
+  const patButton = document.createElement('button'); patButton.id = 'pat-pet'; patButton.type = 'button'; patButton.hidden = true; patButton.dataset.action = 'pat';
   const vitals = document.createElement('div'); vitals.id = 'creature-vitals'; vitals.setAttribute('aria-label', 'Player health and nourishment');
   const hurt = document.createElement('div'); hurt.id = 'creature-hurt';
   const hud = document.createElement('div'); hud.id = 'creature-hud'; hud.hidden = true;
@@ -24,7 +31,8 @@ export function initCreatureUI(session, player, visuals, world, actorId) {
       <section id="pack-supplies" aria-label="Supplies" hidden><h3>Your supplies</h3><p class="pack-hint">Store → shared camp · Take → your bag</p><div class="pack-tools"><button id="creature-forage" type="button" title="Gather fresh forage near leafy vegetation in Hearthwood">${icon('forage')}<span>Gather forage</span></button><button id="creature-cook" type="button" title="Use one raw meat and one wood log from shared camp">${icon('camp')}<span>Cook meat<small>1 raw meat + 1 camp log</small></span></button></div><div id="creature-items"></div></section>
       <section id="pack-companions" aria-label="Companions" hidden><h3>Your companions</h3><p class="pack-hint">Feed and care for wildlife to build trust.</p><div id="creature-companions"></div></section>
     </div></div><p id="creature-feedback" role="status" aria-live="polite"></p>`;
-  document.getElementById('hud').append(hud, opener, vitals, hurt); document.body.append(dialog);
+  document.getElementById('hud-left').append(vitals, eggHud); document.getElementById('interact-slot').append(patButton);
+  document.getElementById('hud').append(hud, opener, hurt); document.body.append(dialog);
   const get = id => dialog.querySelector(`#${id}`);
   function showCategory(category) {
     dialog.querySelectorAll('[data-pack]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.pack === category)));
@@ -35,6 +43,17 @@ export function initCreatureUI(session, player, visuals, world, actorId) {
   const state = () => session.ledger.creatures;
   const creature = () => state()?.creatures[selected];
   const metadata = c => c ? (SPECIES[c.species] ?? {}) : {};
+  const nameOf = c => c.name ?? metadata(c).label ?? c.species;
+  const player3 = () => ({ x: player.position.x, y: player.position.y, z: player.position.z });
+  // The pet within `range` blocks of the player: the closest first. `others` skips the player's own pet.
+  function nearestPet(range, others = false) {
+    const me = player3(); let best = null, bestDistance = range;
+    for (const [id, c] of Object.entries(state()?.creatures ?? {})) {
+      const d = Math.hypot(c.x - me.x, c.z - me.z);
+      if (isPet(c) && c.active !== false && (!others || c.ownerId !== actorId) && d <= bestDistance && Math.abs(c.y - me.y) < 5) { best = id; bestDistance = d; }
+    }
+    return best;
+  }
   function submit(action, extra = {}) {
     get('creature-feedback').textContent = '';
     if (action === 'fight' && dialog.open) { dialog.close(); player.setActive(true); }
@@ -42,7 +61,7 @@ export function initCreatureUI(session, player, visuals, world, actorId) {
     render();
   }
   function button(parent, label, title, action, extra = {}, disabled = false) {
-    const b = document.createElement('button'); b.type = 'button'; b.textContent = label; b.title = title; b.disabled = disabled;
+    const b = document.createElement('button'); b.type = 'button'; b.textContent = label; b.title = title; b.disabled = disabled; b.dataset.action = action;
     b.addEventListener('click', () => {
       const c = creature();
       if (['fight', 'harvest'].includes(action) && c?.ownerId) {
@@ -59,22 +78,30 @@ export function initCreatureUI(session, player, visuals, world, actorId) {
     const description = get('creature-description'); const helpOpen = description.querySelector('details')?.open; description.replaceChildren();
     const portrait = document.createElement('div'); portrait.className = 'wildlife-identity'; portrait.innerHTML = icon('wildlife');
     const name = document.createElement('div'); const heading = document.createElement('h4');
-    heading.textContent = c ? meta.label ?? c.species : 'Choose an animal';
-    const behavior = document.createElement('p'); behavior.textContent = c ? `${c.behavior} · ${c.temperament ?? meta.temperament ?? ''}` : 'Aim at an animal, then press C.';
+    heading.textContent = c ? nameOf(c) : 'Choose an animal';
+    const behavior = document.createElement('p'); behavior.textContent = c ? `${c.behavior} · ${c.temperament ?? meta.temperament ?? ''}` : 'Aim at an animal, then press C. Stand by a pet and press C to pat it.';
     name.append(heading, behavior); portrait.append(name); description.append(portrait);
     if (c) {
       const stats = document.createElement('div'); stats.className = 'wildlife-stats';
-      for (const [label, value, max] of [['Health', Math.ceil(c.health), meta.health ?? c.health], ['Trust', Math.round(c.trust?.[actorId] ?? 0), 100], ['Fear', Math.round(c.fear ?? 0), 100], ['Fed', Math.round(c.hunger), 100]]) {
+      const trusted = Math.round(c.trust?.[isPet(c) ? c.ownerId : actorId] ?? 0);
+      for (const [label, value, max] of isPet(c) ? [['Trust', trusted, 100]] : [['Health', Math.ceil(c.health), meta.health ?? c.health], ['Trust', trusted, 100], ['Fear', Math.round(c.fear ?? 0), 100], ['Fed', Math.round(c.hunger), 100]]) {
         const stat = document.createElement('label'); stat.textContent = `${label} ${value}`;
         const meter = document.createElement('meter'); meter.min = 0; meter.max = Math.max(1, max); meter.value = value; meter.setAttribute('aria-label', label); stat.append(meter); stats.append(stat);
       }
       description.append(stats);
       const help = document.createElement('details'); help.open = Boolean(helpOpen); const summary = document.createElement('summary'); summary.textContent = 'About this animal';
-      const copy = document.createElement('p'); copy.textContent = `${meta.help ?? ''} ${c.ownerId === actorId ? `Your companion · ${c.command}.` : c.ownerId ? 'Companion of another explorer.' : 'Offer its preferred food and gentle care to build trust.'}`;
+      const copy = document.createElement('p'); copy.textContent = `${meta.help ?? ''} ${c.ownerId === actorId ? `Your ${isPet(c) ? 'pet' : 'companion'} · ${c.command}.` : c.ownerId ? 'Companion of another explorer.' : 'Offer its preferred food and gentle care to build trust.'}`;
       help.append(summary, copy); description.append(help);
     }
     const actions = get('creature-actions'); actions.replaceChildren();
-    if (c && !c.harvested) {
+    if (c && !c.harvested && isPet(c)) {
+      const allowed = allowedActions(c);
+      if (allowed.includes('pat')) button(actions, `Pat ${c.name}`, 'Pat this pet to raise its trust with its owner', 'pat');
+      if (c.ownerId === actorId) {
+        for (const action of ['follow', 'stay']) if (allowed.includes(action)) button(actions, action === 'follow' ? 'Follow' : 'Stay', `Ask your pet to ${action}`, action);
+        if (allowed.includes('rename')) for (const name of PET_NAMES) if (name !== c.name) button(actions, name, `Call your pet ${name}`, 'rename', { name });
+      }
+    } else if (c && !c.harvested) {
       const protectedOther = c.ownerId && c.ownerId !== actorId;
       if (c.health > 0) {
         button(actions, 'Strike with axe', 'Attack this explicitly selected creature', 'fight', {}, protectedOther);
@@ -111,13 +138,13 @@ export function initCreatureUI(session, player, visuals, world, actorId) {
     const owned = Object.values(state()?.creatures ?? {}).filter(c => c.ownerId === actorId && !c.harvested);
     if (!owned.length) companions.textContent = 'No companions yet. Build trust through patient feeding and care.';
     for (const companion of owned) {
-      const b = document.createElement('button'); b.type = 'button'; b.textContent = `${metadata(companion).label ?? companion.species} · ${Math.round(Math.hypot(companion.x-player.position.x, companion.z-player.position.z))} m · ${companion.command}`;
+      const b = document.createElement('button'); b.type = 'button'; b.textContent = `${nameOf(companion)} · ${Math.round(Math.hypot(companion.x-player.position.x, companion.z-player.position.z))} m · ${companion.command}`;
       b.title = 'Inspect this companion; commands require being nearby'; b.onclick = () => { selected = companion.id; showCategory('wildlife'); render(); }; companions.append(b);
     }
     if (focused?.title) [...dialog.querySelectorAll('button')].find(b => b.title === focused.title && b.textContent === focused.text)?.focus({ preventScroll: true });
   }
   function open() {
-    selected = aimed; showCategory('wildlife'); document.exitPointerLock?.(); player.setActive(false); render();
+    selected = aimed ?? nearestPet(6); showCategory('wildlife'); document.exitPointerLock?.(); player.setActive(false); render();
     if (!dialog.open) dialog.showModal();
   }
   get('creature-close').onclick = () => dialog.close(); opener.onclick = open;
@@ -142,6 +169,17 @@ export function initCreatureUI(session, player, visuals, world, actorId) {
     } else player._creatureStrike = 0;
     return true;
   };
+  let patTarget = null;
+  patButton.addEventListener('click', () => { if (patTarget) { get('creature-feedback').textContent = ''; session.submitMutation({ kind: 'creature', action: 'pat', targetId: patTarget }); } });
+  const mineNow = () => petView(state(), actorId);
+  if (import.meta.env.DEV || new URLSearchParams(location.search).has('diagnostics')) {
+    window.__PET_DIAGNOSTICS__ = { get mine() { return mineNow(); }, get lastSyncError() { return session.creatureSystem?.pet.lastError ?? null; },
+      get seen() {
+        const meshId = visuals.pets?.mesh.uuid;
+        return Object.values(state()?.creatures ?? {}).filter(c => isPet(c) && c.ownerId !== actorId)
+          .map(c => ({ name: c.name, ownerId: c.ownerId, position: [c.x, c.y, c.z], meshId }));
+      } };
+  }
   return { render, reject(reason) { get('creature-feedback').textContent = reason; }, update(now) {
     const keeper = state()?.players[actorId];
     const vitalText = `Health ${Math.ceil(keeper?.health ?? 100)} · Food ${Math.round(keeper?.hunger ?? 100)}`;
@@ -155,6 +193,11 @@ export function initCreatureUI(session, player, visuals, world, actorId) {
     }
     const c = state()?.creatures[aimed]; hud.hidden = !player.active || !c;
     if (c) hud.textContent = `${metadata(c).label ?? c.species} · ${c.behavior} · ${Math.ceil(c.health)} health · C to interact${c.ownerId ? ' · Companion protected' : ''}`;
+    const egg = mineNow(); eggHud.hidden = egg.stage !== 'egg' || !player.active;
+    const eggHtml = eggHud.hidden ? '' : `Egg <meter min="0" max="1" value="${egg.progress}" aria-label="Egg progress"></meter> ${Math.floor(egg.progress * 100)}%<span class="egg-tip">· walk to hatch it</span>`;
+    if (eggHtml && eggHtml !== eggHud.dataset.html) { eggHud.dataset.html = eggHtml; eggHud.innerHTML = eggHtml; }
+    patTarget = player.active ? nearestPet(patTarget ? 4.9 : 4.5, true) : null; patButton.hidden = !patTarget;
+    if (patTarget) patButton.textContent = `Pat ${state().creatures[patTarget].name}`;
     if (now > lastRefresh) { lastRefresh = now + 500; if (dialog.open) render(); }
   }};
 }
