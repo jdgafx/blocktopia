@@ -389,8 +389,9 @@ export class MultiplayerSession {
 
   submitMutation(mutation) {
     if (!this.ready) return false;
+    const background = mutation.action === 'petsync'; // pet sync is background: a refusal is never player text; syncPet retries every 3 s
     if (!this.snapshotReady) {
-      this.options.onRejected?.('Waiting for the host to synchronize the world');
+      if (!background) this.options.onRejected?.('Waiting for the host to synchronize the world');
       return false;
     }
     const intent = {
@@ -401,6 +402,7 @@ export class MultiplayerSession {
     };
     if (this.role === 'host') return this._handleIntent(this.playerId, intent);
     if (!this.transport.sendControl(this.hostId, { t: 'intent', intent })) {
+      if (background) return false;
       this.options.onRejected?.('Peer connection is not ready. Try again in a moment.');
       this._status('rtc-failure', 'Peer connection is not ready. Action was not applied.');
       return false;

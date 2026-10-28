@@ -182,18 +182,18 @@ export function initEmotes(session, player, renderer, { diagnostics = false } = 
   // Right-hand button stack and the contextual talk button, laid out from the real viewport and the real boxes of the touch
   // controls, hotbar and aim cross (no per-screen pixel offsets). Tiers, first that fits wins: (1) the stylesheet's own column;
   // (2) full-size buttons packed row by row into the right half; (3) icon-only buttons; (4) smaller icon-only buttons.
-  const STACK = ['game-menu', 'open-camp', 'open-journal', 'game-controls', 'open-creatures', 'open-emotes', 'pat-pet'];
+  const STACK = ['game-menu', 'open-camp', 'open-journal', 'game-controls', 'open-creatures', 'open-emotes'];
   const BOX_GAP = 6, EDGE = 4, PACK_TOP = 46, SIDE_PROPS = ['left', 'top', 'right', 'bottom', 'transform'];
   const overlap = (a, b) => a[0] < b[2] && a[2] > b[0] && a[1] < b[3] && a[3] > b[1];
   const boxOf = (el, pad = 0) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 ? [r.left - pad, r.top - pad, r.right + pad, r.bottom + pad] : null; };
   let lastLayoutCheck = 0, layoutSeen = '';
   const hudButtons = () => STACK.map($).filter((el) => el && !el.closest('[hidden]')); // a hidden button has no box: it takes no place in the layout
   function layoutSignature() {
-    const els = [...hudButtons(), $('talk-character'), $('btn-jump'), $('hotbar-frame')].filter(Boolean);
+    const els = [...hudButtons(), $('interact-slot'), $('btn-jump'), $('hotbar-frame')].filter(Boolean);
     return `${innerWidth}x${innerHeight}|${els.map((el) => { const r = el.getBoundingClientRect(); return `${el.id}:${Math.round(r.width)}x${Math.round(r.height)}`; })}`;
   }
   function layoutHud() {
-    const W = innerWidth, H = innerHeight, buttons = hudButtons(), talk = $('talk-character');
+    const W = innerWidth, H = innerHeight, buttons = hudButtons(), talk = $('interact-slot');
     if (!buttons.length || !boxOf(openButton)) return; // the HUD is not drawn yet: try again on the next tick
     const reset = (cls) => {
       document.body.classList.remove('hud-compact', 'hud-tiny'); if (cls) document.body.classList.add(cls);
@@ -239,7 +239,7 @@ export function initEmotes(session, player, renderer, { diagnostics = false } = 
         if (s) { place(buttons[i], s[0], s[1]); rest.push([s[0] - BOX_GAP, s[1] - BOX_GAP, s[0] + w + BOX_GAP, s[1] + h + BOX_GAP]); }
       });
     }
-    if (talk && !talk.hidden && boxOf(talk)) { // keep the stylesheet's spot when it is clear, else the nearest clear spot above the hotbar
+    if (talk && boxOf(talk)) { // keep the stylesheet's spot when it is clear, else the nearest clear spot above the hotbar
       const obstacles = fixedBoxes().concat(buttons.map((el) => boxOf(el, BOX_GAP)).filter(Boolean)), own = boxOf(talk);
       if (obstacles.some((o) => overlap(own, o))) {
         const w = own[2] - own[0], h = own[3] - own[1], hot = $('hotbar-frame') && boxOf($('hotbar-frame')), start = Math.round((hot ? hot[1] : H - 100) - BOX_GAP - h);
