@@ -87,13 +87,17 @@ async function enter(p, code) {
 }
 // Walk with real key presses. Returns the player's path length in blocks (flat), sampled every 250 ms.
 async function walk(p, ms, how = 'roam') {
-  let walked = 0, last = await pos(p), t0 = Date.now(), turn = 0;
+  let walked = 0, last = await pos(p), t0 = Date.now(), turn = 0, mark = last, markT = 0;
   await p.keyboard.down('KeyW');
   try {
     while (Date.now() - t0 < ms) {
       const t = Date.now() - t0;
       if (how === 'roam' && Math.floor(t / 12_000) > turn) { turn++; await p.evaluate(() => { window.__THREE_GAME_DIAGNOSTICS__.debug.player._yaw += 1.3; }); }
       if (how === 'roam' && t % 1500 < 250) await p.keyboard.press('Space'); // hop over one-block steps
+      if (how === 'roam' && t - markT >= 2000) { // blocked (under 3 blocks net in 2 s; the game walks 5/s): turn away and hop, as a player does
+        if (flat(last, mark) < 3) { await p.evaluate(() => { window.__THREE_GAME_DIAGNOSTICS__.debug.player._yaw += 2.1; }); await p.keyboard.press('Space'); }
+        mark = last; markT = t;
+      }
       if (how === 'circle') await p.evaluate(() => { window.__THREE_GAME_DIAGNOSTICS__.debug.player._yaw += 0.6; }); // ~2.4 rad/s: a circle a few blocks wide
       if (how === 'backforth' && t % 3000 < 250) { await p.keyboard.up('KeyW'); await p.keyboard.down('KeyS'); await wait(1500); await p.keyboard.up('KeyS'); await p.keyboard.down('KeyW'); }
       await wait(250);
@@ -125,7 +129,8 @@ test('1. a new player gets an egg that hatches into Pip after about 60-90 s of r
   assert.ok(path > 100, `the player walked only ${path.toFixed(0)} blocks in ${walkedMs / 1000} s: the walk itself did not work`);
   hatched = (await pets(owner)).mine;
   assert.equal(hatched.stage, 'pet', `no hatch after ${walkedMs / 1000} s of walking (${path.toFixed(0)} blocks); progress ${hatched.progress}`);
-  assert.ok(walkedMs >= 45_000, `hatched after only ${walkedMs / 1000} s of walking (want about 60-90 s)`);
+  const floor = 45_000 * (1 - cheat.progress); // progress the cheat phases banked (allowed: under 15%) shortens the walk
+  assert.ok(walkedMs >= floor, `hatched after only ${walkedMs / 1000} s of walking from ${cheat.progress.toFixed(2)} (want about 60-90 s from 0; floor ${(floor / 1000).toFixed(0)} s)`);
   assert.ok(hatched.name && hatched.species, `the pet needs a name and species, got ${JSON.stringify(hatched)}`);
 });
 
@@ -160,10 +165,53 @@ test('2. Pip follows its owner on land and through water; a friend who joins by 
   await owner.waitForFunction(t => window.__PET_DIAGNOSTICS__.mine.trust > t, before, { timeout: 5000 }).catch(() => assert.fail(`the owner's Pip trust stayed ${before} after the friend's pat`));
 });
 
+// Every drawn HUD control is hit at its own centre, no two overlap, none sits on the crosshair (padded 14 px).
+const hudProblems = p => p.evaluate(() => {
+  const vis = el => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 && !el.closest('[hidden]') && getComputedStyle(el).visibility !== 'hidden'; };
+  const els = [...document.querySelectorAll('#hud button, #egg-hud, #pat-pet, button[data-action="pat"]')].filter((el, i, a) => a.indexOf(el) === i && vis(el));
+  const box = el => { const r = el.getBoundingClientRect(); return [r.left, r.top, r.right, r.bottom]; };
+  const hit = (a, b, pad = 0) => a[0] < b[2] + pad - 1 && a[2] > b[0] - pad + 1 && a[1] < b[3] + pad - 1 && a[3] > b[1] - pad + 1;
+  const name = el => el.id || el.dataset.action || el.textContent.trim().slice(0, 12), out = [];
+  const ch = document.getElementById('crosshair');
+  for (const [i, el] of els.entries()) {
+    const b = box(el), c = document.elementFromPoint((b[0] + b[2]) / 2, (b[1] + b[3]) / 2);
+    if (el.tagName === 'BUTTON' && !(c === el || el.contains(c))) out.push(`${name(el)} is covered at its centre by ${c ? name(c) : 'nothing'}`);
+    for (const other of els.slice(i + 1)) if (!el.contains(other) && !other.contains(el) && hit(b, box(other))) out.push(`${name(el)} overlaps ${name(other)}`);
+    if (ch && vis(ch) && hit(b, box(ch), 14)) out.push(`${name(el)} sits on the crosshair`);
+  }
+  return out;
+});
+
+test('2b. the pat button and egg display fit the HUD on phone upright and sideways and on laptops: nothing covers another control or the crosshair', { timeout: 180_000 }, async () => {
+  assert.ok(friend, 'test 2 did not bring a friend in');
+  const bad = [];
+  for (const [w, h] of [[412, 915], [915, 412], [915, 446], [740, 360]]) {
+    await friend.setViewportSize({ width: w, height: h }); await wait(1500);
+    if (!await friend.locator('button[data-action="pat"]').isVisible()) bad.push(`friend ${w}x${h}: no pat button while 2 blocks from Pip`);
+    for (const x of await hudProblems(friend)) bad.push(`friend phone ${w}x${h} (pat shown): ${x}`);
+  }
+  await friend.setViewportSize({ width: 412, height: 915 }); await wait(1000);
+  for (const [w, h] of [[1280, 720], [1024, 768]]) { // the owner's laptop: own pet near, so no pat button; the layout must not change for it
+    await owner.setViewportSize({ width: w, height: h }); await wait(1500);
+    if (await owner.evaluate(() => document.body.classList.contains('hud-compact') || document.body.classList.contains('hud-tiny'))) bad.push(`owner laptop ${w}x${h}: HUD squeezed to compact with no pat button showing`);
+    for (const x of await hudProblems(owner)) bad.push(`owner laptop ${w}x${h}: ${x}`);
+  }
+  await owner.setViewportSize({ width: 1280, height: 720 });
+  assert.deepEqual(bad, [], bad.join('\n'));
+});
+
 test('3. nobody can fight, harvest or release Pip; Pip and egg progress survive a reload', { timeout: 300_000 }, async () => {
   assert.ok(hatched?.stage === 'pet', 'no pet hatched in test 1');
   for (const [who, p] of [['owner', owner], ['friend', friend]]) {
     if (!p) continue;
+    const d = await pets(p), target = who === 'owner' ? d.mine.position : d.seen.find(s => s.name === hatched.name)?.position;
+    assert.ok(target, `${who}: Pip is not in __PET_DIAGNOSTICS__`);
+    await p.evaluate(([x, y, z]) => { // look at Pip: forward is (-sin yaw, 0, -cos yaw) in player.js
+      const pl = window.__THREE_GAME_DIAGNOSTICS__.debug.player, m = pl._camera.matrixWorld.elements;
+      const dx = x - m[12], dy = y + 0.4 - m[13], dz = z - m[14];
+      pl._yaw = Math.atan2(-dx, -dz); pl._pitch = Math.atan2(dy, Math.hypot(dx, dz));
+    }, target);
+    await wait(500);
     await p.keyboard.press('KeyC');
     await p.waitForSelector('#creature-panel[open]', { timeout: 5000 }).catch(() => assert.fail(`${who}: C next to Pip opened no creature panel`));
     assert.ok((await p.textContent('#creature-panel')).includes(hatched.name), `${who}: the creature panel next to Pip does not show Pip`);
