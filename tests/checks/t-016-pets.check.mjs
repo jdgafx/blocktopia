@@ -168,7 +168,8 @@ test('2. Pip follows its owner on land and through water; a friend who joins by 
 // Every drawn HUD control is hit at its own centre, no two overlap, none sits on the crosshair (padded 14 px).
 const hudProblems = p => p.evaluate(() => {
   const vis = el => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 && !el.closest('[hidden]') && getComputedStyle(el).visibility !== 'hidden'; };
-  const els = [...document.querySelectorAll('#hud button, #egg-hud, #pat-pet, button[data-action="pat"]')].filter((el, i, a) => a.indexOf(el) === i && vis(el));
+  // every HUD control AND text panel (T-016 r11: the egg display covered the quest line, a text panel)
+  const els = [...document.querySelectorAll('#hud button, #egg-hud, #pat-pet, button[data-action="pat"], #region-name, #story-objective, #creature-vitals, #talk-character, #hotbar-frame')].filter((el, i, a) => a.indexOf(el) === i && vis(el));
   // the part a person can see: clipped to the viewport and to every scrolling/clipping ancestor (the hotbar is a scroller)
   const box = el => {
     const r = el.getBoundingClientRect(); let b = [r.left, r.top, r.right, r.bottom];
@@ -235,8 +236,24 @@ test('3. nobody can fight, harvest or release Pip; Pip and egg progress survive 
   assert.equal(back?.stage, 'pet', `after a reload the owner has ${JSON.stringify(back)}, not Pip`);
   assert.equal(back.name, hatched.name, 'the pet came back with another name');
   assert.ok(back.trust >= hatched.trust, `trust went down over a reload: ${hatched.trust} -> ${back.trust}`);
+  await friend?.context().close(); await owner.context().close(); // three live pages starve the third one's start (T-027 check)
   const second = await player('egg');
-  await enter(second); await walk(second, 25_000);
+  await enter(second);
+  // a new player on a laptop and a sideways phone sees the egg AND can read the quest line, even the longest one
+  const bad = [];
+  for (const [w, h] of [[1280, 720], [1024, 768], [740, 360]]) {
+    await second.setViewportSize({ width: w, height: h });
+    await second.evaluate(() => { const o = document.getElementById('story-objective'); if (o) o.textContent = 'Find the lantern keeper on the far side of Whispering Marsh and bring her back to Hearthwood before nightfall.'; });
+    await wait(1500);
+    if (!await second.locator('#egg-hud').isVisible()) bad.push(`${w}x${h}: a new player's egg display is not shown`);
+    for (const x of await hudProblems(second)) bad.push(`new player ${w}x${h} (egg shown, long quest line): ${x}`);
+    const loose = await second.evaluate(() => { const col = document.getElementById('hud-left'); if (!col) return ['no #hud-left column: the left-hand HUD panels are not placed by one layout'];
+      return [...col.children].filter(c => ['fixed', 'absolute'].includes(getComputedStyle(c).position)).map(c => `#${c.id} inside #hud-left is still placed by its own ${getComputedStyle(c).position} offset`); });
+    bad.push(...loose.map(x => `${w}x${h}: ${x}`));
+  }
+  await second.setViewportSize({ width: 1280, height: 720 });
+  assert.deepEqual(bad, [], bad.join('\n'));
+  await walk(second, 25_000);
   const mid = (await pets(second)).mine;
   assert.ok(mid.stage === 'egg' && mid.progress >= 0.1, `25 s of walking moved a new egg only to ${mid.progress}`);
   await second.reload({ waitUntil: 'load' }); await signIn(second, 'egg'); await enter(second);
