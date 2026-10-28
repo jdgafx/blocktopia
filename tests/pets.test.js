@@ -39,6 +39,13 @@ describe('a pet follows, swims, and cannot be harmed', () => {
     now += 200; s = step(s, now, [{ id: 'alice', position: at(900, 40) }]);
     expect(Math.hypot(s.creatures[petId('alice')].x - 900, s.creatures[petId('alice')].z - 40)).toBeLessThanOrEqual(6);
   });
+  it('goes inactive, so nobody sees it, when its owner leaves while a friend stays near', () => {
+    let s = pet(0, 0); const now = 1000;
+    s = step(s, now, [{ id: 'bob', position: at(2, 0) }]);
+    expect(s.creatures[petId('alice')].active).toBe(false);
+    s = step(s, now + 200, [{ id: 'bob', position: at(2, 0) }, { id: 'alice', position: at(1, 0) }]);
+    expect(s.creatures[petId('alice')].active).toBe(true);
+  });
   it('follows onto the water and floats on it', () => {
     let s = pet(0, 0, 21), now = 1000;
     for (let i = 0; i < 40; i++) { now += 200; s = step(s, now, [{ id: 'alice', position: at(i * .5, 3, 28) }], lake); }

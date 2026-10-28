@@ -66,7 +66,7 @@ function populate(state, players, context, now) {
     if (!c.touched && nearest(c) > 96) delete state.creatures[id];
     else c.active = false;
   }
-  const nearby = Object.values(state.creatures).filter(c => !c.harvested && (nearest(c) < 80
+  const nearby = Object.values(state.creatures).filter(c => !c.harvested && (!isPet(c) || ownerPresent(c)) && (nearest(c) < 80
     || (c.health > 0 && c.ownerId && ownerPresent(c) && c.command === 'follow')))
     .sort((a, b) => Number(Boolean(b.ownerId)) - Number(Boolean(a.ownerId)) || nearest(a) - nearest(b) || a.id.localeCompare(b.id));
   nearby.slice(0, MAX_CREATURES).forEach(c => { c.active = true; });

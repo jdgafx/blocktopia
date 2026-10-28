@@ -17,7 +17,7 @@ export class CreatureSession {
     this.actors = new Map(); this.elapsed = 0; this.identityAt = 0;
     this.resyncAt = 0; this.ready = false; this.pendingIdentity = false; this.disposed = false;
     this.walk = new Map(); // host only: new-ground tracking per player, for hatching eggs
-    this.pet = { wait: 0, save: 0, saving: false, stored: null, loaded: false, failed: false, base: undefined, saved: null };
+    this.pet = { wait: 1.5, lastError: null, save: 0, saving: false, stored: null, loaded: false, failed: false, base: undefined, saved: null };
     this.loadPet();
     this.readyPromise = this.register();
   }
@@ -27,9 +27,11 @@ export class CreatureSession {
     this.petSaves.load().then(record => { this.pet.stored = this.pet.saved = record; this.pet.loaded = true; })
       .catch(error => { this.pet.failed = true; console.warn('Pet could not be loaded; it will not be saved this visit.', error); });
   }
+  // A background sync's refusal is a diagnostic, never player-facing text; syncPet retries every 3 s.
+  syncFailed(reason) { this.pet.lastError = reason; console.debug('Pet sync refused; will retry:', reason); }
   syncPet(dt) {
     const p = this.pet, s = this.session, mine = s.ledger.creatures?.players?.[this.actorId];
-    if (p.failed || !p.loaded) return;
+    if (p.failed || !p.loaded || !s.options.getLocalState?.()?.position) return;
     if ((mine?.syncs ?? 0) <= (p.base ?? Infinity)) { // not restored into this room yet: ask the host, again every 3 s
       if ((p.wait -= dt) > 0) return;
       p.wait = 3; p.base ??= mine?.syncs ?? 0;
@@ -119,6 +121,7 @@ export class CreatureSession {
   }
   receive(from, message) {
     const s = this.session;
+    if (message?.t === 'intent-rejected' && message.background) { if (s.role === 'guest' && from === s.hostId) this.syncFailed(message.reason); return true; }
     if (message?.t === 'creatures-resync') {
       if (s.role === 'host' && s.members.some(m => m.playerId === from) && Date.now() - this.resyncAt > 1000) {
         this.resyncAt = Date.now(); s._sendSnapshot({ send: raw => s.transport.sendControl(from, JSON.parse(raw)) });
@@ -144,9 +147,10 @@ export class CreatureSession {
   }
   handle(from, intent) {
     const s = this.session;
+    const background = intent?.action === 'petsync';
     const reject = reason => {
-      if (from === s.playerId) s.options.onRejected?.(reason);
-      else s.transport.sendControl(from, { t: 'intent-rejected', reason });
+      if (from === s.playerId) { if (background) this.syncFailed(reason); else s.options.onRejected?.(reason); }
+      else s.transport.sendControl(from, { t: 'intent-rejected', reason, ...(background && { background }) });
       return false;
     };
     if (!this.ready || !s.ready || !s.snapshotReady) return reject('Creature interactions are still connecting');

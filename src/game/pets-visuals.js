@@ -27,7 +27,7 @@ function buildPip() {
 
 export class PetVisuals {
   constructor(scene) {
-    this.scene = scene; this.poses = new Map(); this.time = 0;
+    this.scene = scene; this.poses = new Map(); this.time = 0; this.ids = [];
     this.geometry = buildPip(); this.material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: .8 });
     this.mesh = new THREE.InstancedMesh(this.geometry, this.material, MAX_PETS);
     this.mesh.name = 'pets-pip'; this.mesh.frustumCulled = false; this.mesh.count = 0; this.mesh.visible = false;
@@ -53,8 +53,16 @@ export class PetVisuals {
       this.mesh.setMatrixAt(drawn.length, this._m); drawn.push(id);
     }
     for (const id of this.poses.keys()) if (!creatures?.[id]) this.poses.delete(id);
-    this.mesh.count = drawn.length; this.mesh.visible = drawn.length > 0; this.mesh.instanceMatrix.needsUpdate = true;
+    this.ids = drawn; this.mesh.count = drawn.length; this.mesh.visible = drawn.length > 0; this.mesh.instanceMatrix.needsUpdate = true;
     return drawn;
+  }
+
+  // The pet the ray hits, as { id, distance }, or null. The bounding sphere is rebuilt: instances move every frame.
+  pick(raycaster) {
+    if (!this.mesh.count) return null;
+    this.mesh.matrixWorld.identity(); this.mesh.boundingSphere = null;
+    const hit = raycaster.intersectObject(this.mesh, false)[0], id = hit && this.ids[hit.instanceId];
+    return id ? { id, distance: hit.distance } : null;
   }
 
   dispose() { this.scene.remove(this.mesh); this.mesh.dispose(); this.geometry.dispose(); this.material.dispose(); this.poses.clear(); }

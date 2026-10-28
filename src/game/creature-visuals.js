@@ -256,12 +256,15 @@ export class CreatureVisuals {
     this.raycaster.setFromCamera(new THREE.Vector2(0, 0), camera); this.raycaster.far = maxDistance;
     const roots = [...this.records.values()].filter(r => r.root.visible).map(r => r.root);
     roots.forEach(root => root.updateMatrixWorld(true));
+    let wild = null;
     for (const hit of this.raycaster.intersectObjects(roots, true)) {
       let p = hit.object, visible = true, id;
       while (p) { visible &&= p.visible; id ??= p.userData.creatureId; p = p.parent; }
-      if (visible && id) { this._lastTargetDistance = hit.distance; return id; }
+      if (visible && id) { this._lastTargetDistance = hit.distance; wild = id; break; }
     }
-    return null;
+    const pet = this.pets.pick(this.raycaster); // Pip is an instanced mesh outside this.records: the nearer hit wins
+    if (pet && pet.distance < this._lastTargetDistance) { this._lastTargetDistance = pet.distance; return pet.id; }
+    return wild;
   }
 
   dispose() {
