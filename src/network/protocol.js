@@ -247,3 +247,14 @@ export class MutationLedger {
     return true;
   }
 }
+
+// Emotes and pings carry only an id from these fixed lists; nothing a sender types ever reaches a screen.
+export const SOCIAL_EMOTES = Object.freeze(['wave', 'love', 'sit', 'cheer', 'laugh', 'dance']);
+export const SOCIAL_PINGS = Object.freeze(['come', 'look', 'help']);
+export function parseSocial(payload) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
+  if (Object.keys(payload).length !== 3 || ['kind', 'id', 'from'].some((key) => typeof payload[key] !== 'string')) return null;
+  const { kind, id, from } = payload;
+  if (from.length > 64 || !(kind === 'emote' ? SOCIAL_EMOTES : kind === 'ping' ? SOCIAL_PINGS : []).includes(id)) return null;
+  return { kind, id, from };
+}
