@@ -1,0 +1,17 @@
+name = "blocktopia-next-fable"
+compatibility_date = "2026-03-01"
+pages_build_output_dir = "dist"
+
+# Cloudflare D1 Serverless SQL Database (Free 5GB / 5M reads per day)
+[[d1_databases]]
+binding = "DB"
+database_name = "blocktopia_next_fable_db"
+database_id = "00000000-0000-0000-0000-000000000000" # Replace after running: npx wrangler d1 create blocktopia_next_fable_db
+
+# Cloudflare R2 Zero-Egress 3D Dinosaur Asset Vault ($0.00 Bandwidth Forever)
+[[r2_buckets]]
+binding = "ASSETS_BUCKET"
+bucket_name = "blocktopia-next-fable-assets"
+
+[vars]
+R2_PUBLIC_URL = "https://assets.yourdinogame.com"

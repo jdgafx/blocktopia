@@ -1,0 +1,6 @@
+{
+  "$schema": "https://www.partykit.io/schema.json",
+  "name": "blocktopia-next-fable-rooms",
+  "main": "src/server/party.ts",
+  "compatibilityDate": "2026-03-01"
+}

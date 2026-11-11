@@ -1,0 +1,30 @@
+{
+  "name": "blocktopia-next-fable",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently \"npx vite\" \"npx partykit dev\"",
+    "dev:client": "vite",
+    "dev:server": "partykit dev",
+    "build": "vite build",
+    "models": "python3 tools/build_models.py public/models",
+    "db:init:local": "wrangler d1 execute blocktopia_next_fable_db --local --file=./schema.sql",
+    "db:init:prod": "wrangler d1 execute blocktopia_next_fable_db --remote --file=./schema.sql",
+    "deploy:party": "partykit deploy",
+    "deploy:pages": "vite build && wrangler pages deploy dist",
+    "deploy": "npm run build && npm run deploy:party && npm run deploy:pages"
+  },
+  "dependencies": {
+    "three": "^0.170.0",
+    "partysocket": "^1.0.2"
+  },
+  "devDependencies": {
+    "@types/three": "^0.170.0",
+    "concurrently": "^9.0.0",
+    "partykit": "^0.0.112",
+    "typescript": "^5.6.0",
+    "vite": "^5.4.0",
+    "wrangler": "^3.80.0"
+  }
+}

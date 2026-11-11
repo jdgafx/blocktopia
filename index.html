@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>BLOCKTOPIA NEXT FABLE — Co-op Giant Dinosaur Chopping & Extraction</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; font-family: 'Segoe UI', system-ui, sans-serif; }
+    body, html { width: 100%; height: 100%; overflow: hidden; background: #070b0f; color: #f0f6fc; }
+    #game-canvas { width: 100vw; height: 100vh; display: block; }
+
+    /* Sleek Next-Gen Glassmorphic HUD */
+    #hud { position: fixed; inset: 0; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; padding: 18px; }
+    .hud-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+    .panel {
+      background: rgba(10, 16, 24, 0.78);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(0, 245, 212, 0.28);
+      border-radius: 12px;
+      padding: 14px 18px;
+      pointer-events: auto;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.55);
+    }
+    .brand-title { font-size: 20px; font-weight: 900; letter-spacing: 1.5px; color: #00f5d4; text-transform: uppercase; }
+    .phase-badge {
+      display: inline-block; margin-top: 6px; padding: 4px 10px; border-radius: 6px;
+      font-size: 12px; font-weight: 800; background: #ff9f1c; color: #000; letter-spacing: 0.8px;
+    }
+    .phase-eclipse { background: #ff2a5f !important; color: #fff !important; animation: pulse 1.2s infinite; }
+
+    /* Boss Dinosaur Part-Chopping Scanner */
+    #dino-scanner { min-width: 320px; }
+    .dino-name { font-size: 16px; font-weight: 800; color: #ff9f1c; margin-bottom: 6px; display: flex; justify-content: space-between; }
+    .hp-bar-outer { width: 100%; height: 12px; background: rgba(255,255,255,0.12); border-radius: 6px; overflow: hidden; margin-bottom: 10px; }
+    .hp-bar-inner { height: 100%; width: 100%; background: linear-gradient(90deg, #ff2a5f, #ff9f1c); transition: width 0.15s ease; }
+    .parts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 11px; }
+    .part-pill {
+      padding: 5px 8px; border-radius: 6px; background: rgba(255,255,255,0.07);
+      border-left: 3px solid #00f5d4; display: flex; justify-content: space-between;
+    }
+    .part-severed { border-left-color: #ff2a5f; opacity: 0.5; text-decoration: line-through; color: #ff2a5f; }
+
+    /* Center Crosshair & Dynamic Action Prompts */
+    #crosshair-wrap { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; pointer-events: none; }
+    .crosshair {
+      width: 22px; height: 22px; border: 2px solid rgba(0, 245, 212, 0.85);
+      border-radius: 50%; margin: 0 auto; position: relative; transition: transform 0.08s ease;
+    }
+    .crosshair::after { content: ''; position: absolute; inset: 7px; background: #ff9f1c; border-radius: 50%; }
+    #target-prompt {
+      margin-top: 10px; font-size: 14px; font-weight: 800; color: #00f5d4;
+      text-shadow: 0 2px 8px #000; background: rgba(0,0,0,0.65); padding: 4px 12px; border-radius: 20px;
+    }
+
+    /* Viral Banner Alert */
+    #event-banner {
+      position: fixed; top: 105px; left: 50%; transform: translateX(-50%);
+      background: linear-gradient(90deg, rgba(255,42,95,0.92), rgba(255,159,28,0.92));
+      color: #fff; font-weight: 900; font-size: 15px; padding: 10px 24px; border-radius: 30px;
+      box-shadow: 0 0 30px rgba(255, 42, 95, 0.6); display: none; z-index: 20; letter-spacing: 0.5px;
+    }
+
+    /* Bottom Controls & Sanctuary Cozy Actions */
+    .hud-bottom { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; }
+    .btn {
+      background: linear-gradient(135deg, #00f5d4, #00bbf9); color: #041019; border: none;
+      padding: 10px 16px; border-radius: 8px; font-weight: 900; font-size: 13px; cursor: pointer;
+      transition: transform 0.1s ease, filter 0.1s ease; margin-right: 6px;
+    }
+    .btn:hover { transform: translateY(-2px); filter: brightness(1.1); }
+    .btn-orange { background: linear-gradient(135deg, #ff9f1c, #ff2a5f); color: #fff; }
+    .controls-list { font-size: 12px; line-height: 1.65; color: #b8c7d9; }
+    .key { background: rgba(255,255,255,0.16); padding: 2px 6px; border-radius: 4px; color: #fff; font-weight: 700; }
+
+    @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.06); } }
+  </style>
+</head>
+<body>
+  <canvas id="game-canvas"></canvas>
+
+  <div id="event-banner"></div>
+
+  <div id="crosshair-wrap">
+    <div class="crosshair" id="crosshair"></div>
+    <div id="target-prompt">Click Canvas to Lock Mouse • Aim at Dinosaur Limb to Chop</div>
+  </div>
+
+  <div id="hud">
+    <div class="hud-top">
+      <!-- Left: Squad, Phase & Viral Link Invite -->
+      <div class="panel">
+        <div class="brand-title">🦖 BLOCKTOPIA NEXT FABLE</div>
+        <div id="phase-badge" class="phase-badge">PHASE 1: DAYTIME TITAN HUNT</div>
+        <div style="margin-top:10px; font-size:13px;">
+          <div>🚛 <b>Harvester Truck Cargo:</b> <span id="cargo-count" style="color:#00f5d4">0</span> Chunks (<span id="gold-count" style="color:#ff9f1c">0</span> Gold)</div>
+          <div>🔪 <b>Equipped Cleaver:</b> <span id="weapon-name">Voltaic Plasma Great-Saw</span></div>
+        </div>
+        <div style="margin-top:10px;">
+          <button class="btn" id="btn-invite">🔗 COPY SQUAD INVITE LINK</button>
+          <button class="btn btn-orange" id="btn-gfx">✨ GRAPHICS: ULTRA (WebGPU/PBR)</button>
+        </div>
+      </div>
+
+      <!-- Right: Live Dinosaur Anatomy & Part-Chopping Scanner -->
+      <div class="panel" id="dino-scanner">
+        <div class="dino-name">
+          <span id="scan-dino-name">VOLTAIC BIO-REX (60 FT)</span>
+          <span id="scan-dino-hp">6000 / 6000 HP</span>
+        </div>
+        <div class="hp-bar-outer"><div class="hp-bar-inner" id="scan-hp-bar"></div></div>
+        <div style="font-size:11px; color:#8ba0b8; margin-bottom:6px;">TARGETABLE ANATOMY (AIM & LEFT-CLICK TO CHOP):</div>
+        <div class="parts-grid" id="parts-grid"></div>
+      </div>
+    </div>
+
+    <div class="hud-bottom">
+      <!-- Bottom Left: Controls Guide -->
+      <div class="panel controls-list">
+        <div><span class="key">W A S D</span> Move / Climb • <span class="key">SHIFT</span> Sprint • <span class="key">SPACE</span> Jump</div>
+        <div><span class="key">LEFT-CLICK</span> Swing Plasma Cleaver / Saw Fallen Carcass</div>
+        <div><span class="key">RIGHT-CLICK</span> or <span class="key">Q</span> Fire Pneumatic Grapple Hook onto Dinosaur Back!</div>
+        <div><span class="key">E</span> Pick Up Severed Dino Part / Attach Truck Tow-Winch (for Heavy Bio-Heart)</div>
+        <div><span class="key">F</span> Toggle Flashlight / Truck High-Beams • <span class="key">R</span> Drive Harvester Truck to Sanctuary</div>
+      </div>
+
+      <!-- Bottom Right: Sanctuary Pitch C Actions (Cooking, Forging & Bronto Base) -->
+      <div class="panel">
+        <div style="font-weight:800; color:#ff9f1c; margin-bottom:8px; font-size:13px;">🏕️ SANCTUARY BASE & COZY LOOP (PITCH C)</div>
+        <button class="btn btn-orange" id="btn-cook">🍖 COOK DINO STEAK FEAST (+75% CHOP DMG)</button>
+        <button class="btn" id="btn-extract">🚪 EXTRACT TRUCK CARGO TO D1 DB</button>
+        <button class="btn" id="btn-new-hunt">🦖 SPAWN NEW TITAN HUNT</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/client/main.ts"></script>
+</body>
+</html>
