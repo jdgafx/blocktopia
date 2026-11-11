@@ -92,7 +92,7 @@ const composer = new EffectComposer(
 );
 composer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 composer.addPass(new RenderPass(scene, camera));
-const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.55, 0.7, 1.15);
+const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.4, 0.6, 1.5);
 composer.addPass(bloomPass);
 composer.addPass(new OutputPass());
 
@@ -391,7 +391,7 @@ const moteSeeds = new Float32Array(MOTES * 3).map(() => Math.random());
 const moteGeo = new THREE.BufferGeometry();
 moteGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(MOTES * 3), 3));
 const moteMat = new THREE.PointsMaterial({
-  color: 0xfff2b0, size: 0.22, transparent: true, opacity: 0.7, depthWrite: false, blending: THREE.AdditiveBlending
+  color: 0xfff2b0, size: 0.13, transparent: true, opacity: 0.7, depthWrite: false, blending: THREE.AdditiveBlending
 });
 const motes = new THREE.Points(moteGeo, moteMat);
 motes.frustumCulled = false;
@@ -1012,8 +1012,8 @@ function setWorldPhaseVisuals(phase: string) {
     skyMat.uniforms.night.value = 1;
     cloudLayer.visible = false;
     moteMat.color.setHex(0x7dffb0);
-    moteMat.size = 0.34;
-    bloomPass.strength = 0.9;
+    moteMat.size = 0.2;
+    bloomPass.strength = 0.55;
     skyMat.uniforms.top.value.setHex(0x010208);
     skyMat.uniforms.horizon.value.setHex(0x090d1a);
     badge.textContent = '🌑 PHASE 2: BLOOD ECLIPSE EXTRACTION (STALKERS ACTIVE)';
@@ -1028,8 +1028,8 @@ function setWorldPhaseVisuals(phase: string) {
     skyMat.uniforms.night.value = 0;
     cloudLayer.visible = true;
     moteMat.color.setHex(0xfff2b0);
-    moteMat.size = 0.22;
-    bloomPass.strength = 0.55;
+    moteMat.size = 0.13;
+    bloomPass.strength = 0.4;
     skyMat.uniforms.top.value.setHex(0x4f95d0);
     skyMat.uniforms.horizon.value.setHex(0x87b8d4);
     badge.textContent = '☀️ PHASE 1: DAYTIME TITAN HUNT';
